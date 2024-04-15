@@ -7,19 +7,43 @@ GRID_WIDTH = 16
 
 CELLS = 8
 
+cam_x = 0
+cam_y = 0
+
 function _init()
     
 end
 
 function _update()
 
+    x = 0
+    y = 0
+    if btn(0) then
+        x = -1
+    elseif btn(1) then
+        x = 1
+    elseif btn(2) then
+        y = -1
+    elseif btn(3) then
+        y = 1
+    end
+
+    cam_x = cam_x + x
+    cam_y = cam_y + y
+
+    camera(cam_x, cam_y)
+
 end
 
 function _draw()
     cls()
-    for i=1,10 do
-        line(0, i*GRID_HEIGHT, GRID_WIDTH * CELLS, i*GRID_HEIGHT + GRID_HEIGHT/2*CELLS)
-        line(GRID_WIDTH * CELLS, i*GRID_HEIGHT, 0, i*GRID_HEIGHT+GRID_HEIGHT/2*CELLS)
+    for i=0,CELLS do
+        startx = -1 * i * GRID_HEIGHT
+        starty = i*GRID_HEIGHT/2
+        line(startx, starty, startx+GRID_WIDTH*CELLS, starty+GRID_HEIGHT/2*CELLS)
+        startx = i * GRID_HEIGHT
+        starty = i*GRID_HEIGHT/2
+        line(startx, starty, startx-GRID_WIDTH*CELLS, starty+GRID_HEIGHT/2*CELLS)
     end
 end
 
