@@ -2,6 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 42
 __lua__
 
+-- map sizes 11, 14, 16, 18, 20 or 30
 grid_w = 16
 grid_h = 16
 grid = {
@@ -32,6 +33,10 @@ function shuffle(t)
     end
 end
 
+function grid_at(x, y)
+    return grid[y*grid_w+x]
+end
+
 function build_perlin_map(map_w, map_h)
 
 end
@@ -56,6 +61,26 @@ function generate_map()
     
     -- choose capital locations, then force 3x3 to be land
     -- split map into 4 'domains and randomly choose one for each player'
+    local quad_pad = 2
+    local quad_w = flr(grid_w / 2) - quad_pad
+    local quad_h = flr(grid_h / 2) - quad_pad
+    local quadrants = {
+        {quad_pad+quad_w, quad_pad+quad_h},
+        {quad_pad+quad_w, grid_h-quad_pad-quad_h},
+        {grid_w-quad_pad-quad_w, quad_pad+quad_h},
+        {grid_w-quad_pad-quad_w, grid_h-quad_pad-quad_h},
+    }
+
+    shuffle(quadrants)
+    
+    for i, player in ipairs(players) do
+        local cap_x = flr(rnd(grid_w)) + quadrants[i][1]
+        local cap_y = flr(rnd(grid_h)) + quadrants[i][2]
+        
+        -- insert player capital into map
+        -- TODO generste a goofy name
+        add(grid_at(cap_x, cap_y).buildings, {kind='city', level=1, tribe=player.tribe, capital=true})
+    end
     
     
 end
@@ -108,6 +133,14 @@ function draw_building(building, x, y)
     if building.kind == 'forest' then
     -- placeholder art
         circfill(x, y+4, 4, 7)
+    elseif building.kind == 'city' then
+        local c = 5
+        if building.tribe == 'red' then
+            c = 8
+        elseif building.tribe == 'blue' then
+            c = 12
+        end
+        rectfill(x-2, y-2, x+2, y+2, c)
     end
 end
 
