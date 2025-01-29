@@ -9,6 +9,9 @@ grid = {
 
 }
 
+cursor_x=flr(grid_w/2)
+cursor_y=flr(grid_h/2)
+
 -- grid item
 -- { kind = 'grass|water|deep-water|mountain', buildings={}
 --   
@@ -33,8 +36,15 @@ function shuffle(t)
     end
 end
 
+function panic(str)
+    cls(0)
+    print(str)
+    while true do
+    end
+end
+
 function grid_at(x, y)
-    return grid[y*grid_w+x]
+    return grid[(y-1)*grid_w+(x-1)+1]
 end
 
 function build_perlin_map(map_w, map_h)
@@ -52,7 +62,7 @@ function generate_map()
                     add(new_tile.buildings, {kind='forest'})
                 end
             else
-                add(grid, {kind='water'})
+                add(grid, {kind='water', buildings={}})
             end
         end
     end
@@ -62,24 +72,28 @@ function generate_map()
     -- choose capital locations, then force 3x3 to be land
     -- split map into 4 'domains and randomly choose one for each player'
     local quad_pad = 2
-    local quad_w = flr(grid_w / 2) - quad_pad
-    local quad_h = flr(grid_h / 2) - quad_pad
+    local quad_w = flr(grid_w / 2) - quad_pad*2
+    local quad_h = flr(grid_h / 2) - quad_pad*2
     local quadrants = {
-        {quad_pad+quad_w, quad_pad+quad_h},
-        {quad_pad+quad_w, grid_h-quad_pad-quad_h},
-        {grid_w-quad_pad-quad_w, quad_pad+quad_h},
-        {grid_w-quad_pad-quad_w, grid_h-quad_pad-quad_h},
+        {quad_pad, quad_pad},
+        {quad_pad, grid_h-quad_pad-quad_h},
+        {grid_w-quad_pad-quad_w, quad_pad},
+        {grid_w-quad_pad-quad_w, grid_h-quad_pad-quad_h}
     }
 
     shuffle(quadrants)
     
     for i, player in ipairs(players) do
-        local cap_x = flr(rnd(grid_w)) + quadrants[i][1]
-        local cap_y = flr(rnd(grid_h)) + quadrants[i][2]
+        local cap_x = flr(rnd(quad_w)) + quadrants[i][1]
+        local cap_y = flr(rnd(quad_h)) + quadrants[i][2]
         
         -- insert player capital into map
         -- TODO generste a goofy name
-        add(grid_at(cap_x, cap_y).buildings, {kind='city', level=1, tribe=player.tribe, capital=true})
+        local buildings = grid_at(cap_x, cap_y)
+        if buildings == nil then
+            panic (tostring(cap_x)..','..tostring(cap_y))
+        end
+        add(buildings.buildings, {kind='city', level=1, tribe=player.tribe, capital=true})
     end
     
     
@@ -89,8 +103,17 @@ function _init()
     generate_map()
 end
 
-function _update()
-
+function _update60()
+    -- move camera
+    if btnp(0,1) then
+        cursor_x = max(1, cursor_x-1)
+    elseif btnp(1,1) then
+        cursor_x = min(grid_w, cursor_x+1)
+    elseif btnp(2,1) then
+        cursor_y = max(1, cursor_y-1)
+    elseif btnp(3,1) then
+        cursor_y = min(grid_h, cursor_y+1)
+    end
 end
 
 function draw_map(offset_x, offset_y)
@@ -103,6 +126,10 @@ function draw_map(offset_x, offset_y)
             draw_tile(grid[j*grid_w+i+1], x, y)
         end
     end
+    
+    draw_cursor(64, 64)
+    
+    -- TODO might want to draw all buildings after cursor
 end
 
 -- x,y - position of top pixel of tile
@@ -140,12 +167,20 @@ function draw_building(building, x, y)
         elseif building.tribe == 'blue' then
             c = 12
         end
-        rectfill(x-2, y-2, x+2, y+2, c)
+        rectfill(x-2, y+2, x+2, y+6, c)
     end
+end
+
+-- draw cursor at specific pixel value
+function draw_cursor(px, py)
+    local cursor_c = 7
+    line(px-8, py+3, px+1, py-1, cursor_c)
+    line(px+9, py+3, px, py-1, cursor_c)
+    line(px-6, py+4, px+1, py+7, cursor_c)
+    line(px+7, py+4, px, py+7, cursor_c)
 end
 
 function _draw()
     cls(0)
-    -- draw_tile({kind='grass'}, 64,64)
-    draw_map(64, 10)
+    draw_map(-cursor_y*8+cursor_x*8+64, cursor_y*4+cursor_x*4-64)
 end
