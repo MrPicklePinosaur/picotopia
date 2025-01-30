@@ -15,7 +15,7 @@ cursor_x=flr(grid_w/2)
 cursor_y=flr(grid_h/2)
 
 -- grid item
--- { kind = 'grass|water|deep-water|mountain', buildings={}
+-- { kind = 'grass|forest|water|deep-water|mountain', building={}, resource={}
 --   
 
 -- building
@@ -29,6 +29,7 @@ current_turn = 'red'
 
 tile_colors = {
     grass={c1=11, c2=3},
+    forest={c1=11, c2=3},
     water={c1=12}
 }
 
@@ -69,14 +70,15 @@ function generate_map()
     for j=1,grid_h do
         for i=1,grid_w do
             if rnd(1) > 0.2 then
-                local new_tile = add(grid, {kind='grass', buildings={}})
+                local new_tile = add(grid, {kind='grass', building={}})
                 -- if grass choose a random resource type
                 local roll = rnd(1)
                 if roll > 0.8 then
-                    add(new_tile.buildings, {kind='forest'})
+                    -- TODO fix resources
+                    new_tile.kind = 'forest'
                 end
             else
-                add(grid, {kind='water', buildings={}})
+                add(grid, {kind='water', building={}})
             end
         end
     end
@@ -103,13 +105,10 @@ function generate_map()
         
         -- insert player capital into map
         -- TODO generste a goofy name
-        local buildings = grid_at(cap_x, cap_y)
-        if buildings == nil then
-            panic (tostring(cap_x)..','..tostring(cap_y))
-        end
-        add(buildings.buildings, {kind='city', level=1, tribe=player.tribe, capital=true})
+        local cell = grid_at(cap_x, cap_y)
+        
+        cell.building = {kind='city', level=1, tribe=player.tribe, capital=true}
     end
-    
     
 end
 
@@ -119,7 +118,7 @@ end
 
 function handle_interact()
     local cell = grid_cur()
-    if cell.kind == 'city' and cell.tribe == current_turn then
+    if cell.building.kind == 'city' and cell.building.tribe == current_turn then
         -- troop selection menu
         unit_menu.visible = true
     end
@@ -183,18 +182,18 @@ function draw_tile(tile, x, y)
         line(x-6, y+4, x+1, y+7, c2)
         line(x+7, y+4, x, y+7, c2)
     end
-    
-    -- draw buildings on the tile
-    for _, building in ipairs(tile.buildings) do
-        draw_building(building, x, y)
+ 
+    if tile.kind == 'forest' then
+        -- placeholder art
+        circfill(x, y+4, 4, 7)
     end
+    
+    draw_building(tile.building, x, y)
 end
 
 function draw_building(building, x, y)
-    if building.kind == 'forest' then
-    -- placeholder art
-        circfill(x, y+4, 4, 7)
-    elseif building.kind == 'city' then
+    
+    if building.kind == 'city' then       
         local c = 5
         if building.tribe == 'red' then
             c = 8
@@ -222,22 +221,17 @@ function draw_ui()
     rectfill(0, 118, 128, 128, 1)
     
     local cell = grid_at(cursor_x, cursor_y)
-    if #cell.buildings == 0 then
-        print(cell.kind, 3, 120, 7)
-    else
-        local x = 3
-        for i, building in ipairs(cell.buildings) do
-            x = print(building.kind, x, 120, 7)
-            if building.kind == 'city' then
-                x = print(' ['..building.tribe..']', x, 120, 6)
-            end
-            
-            if i~=#cell.buildings then
-                x = print(', ', x, 120, 7)
-            end
+    local x = 3
+    x = print(cell.kind, x, 120, 7)
+    
+    local building = cell.building
+    if building.kind ~= nil then 
+        x = print(', '.. building.kind, x, 120, 7)
+        
+        if building.kind == 'city' then
+            x = print(' ['..building.tribe..']', x, 120, 6)
         end
     end
-    
     
     local pos = tostring(cursor_x)..','..tostring(cursor_y)
     print(pos, 125-4*#pos, 120, 7)
