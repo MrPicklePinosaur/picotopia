@@ -2,6 +2,8 @@ pico-8 cartridge // http://www.pico-8.com
 version 42
 __lua__
 
+#include menu.p8
+
 -- map sizes 11, 14, 16, 18, 20 or 30
 grid_w = 16
 grid_h = 16
@@ -23,11 +25,19 @@ players = {
     {tribe='red'},
     {tribe='blue'}
 }
+current_turn = 'red'
 
 tile_colors = {
     grass={c1=11, c2=3},
     water={c1=12}
 }
+
+-- menus
+unit_menu = menu_new({
+    {unit='warrior'},
+    {unit='rider'},
+})
+unit_menu.visible = false
 
 function shuffle(t)
     for i = #t, 2, -1 do
@@ -45,6 +55,10 @@ end
 
 function grid_at(x, y)
     return grid[(y-1)*grid_w+(x-1)+1]
+end
+
+function grid_cur()
+    return grid_at(cursor_x, cursor_y)
 end
 
 function build_perlin_map(map_w, map_h)
@@ -103,16 +117,37 @@ function _init()
     generate_map()
 end
 
+function handle_interact()
+    local cell = grid_cur()
+    if cell.kind == 'city' and cell.tribe == current_turn then
+        -- troop selection menu
+        unit_menu.visible = true
+    end
+end
+
 function _update60()
-    -- move camera
-    if btnp(0,1) then
-        cursor_x = max(1, cursor_x-1)
-    elseif btnp(1,1) then
-        cursor_x = min(grid_w, cursor_x+1)
-    elseif btnp(2,1) then
-        cursor_y = max(1, cursor_y-1)
-    elseif btnp(3,1) then
-        cursor_y = min(grid_h, cursor_y+1)
+    if unit_menu.visible then
+        if btnp(2,1) then
+            unit_menu:up()
+        elseif btnp(3,1) then
+            unit_menu:down()
+        elseif btnp(4,1) then
+            unit_menu.visible = false
+        end
+    else
+        -- move camera
+        if btnp(0,1) then
+            cursor_x = max(1, cursor_x-1)
+        elseif btnp(1,1) then
+            cursor_x = min(grid_w, cursor_x+1)
+        elseif btnp(2,1) then
+            cursor_y = max(1, cursor_y-1)
+        elseif btnp(3,1) then
+            cursor_y = min(grid_h, cursor_y+1)
+        elseif btnp(5,1) then
+            -- open relevant menu
+            handle_interact()
+        end
     end
 end
 
@@ -206,6 +241,18 @@ function draw_ui()
     
     local pos = tostring(cursor_x)..','..tostring(cursor_y)
     print(pos, 125-4*#pos, 120, 7)
+    
+    -- menus
+    if unit_menu.visible then
+        rect(31, 19, 97, 61, 7)
+        rectfill(32, 20, 96, 60, 1)
+        
+        for i, item in ipairs(unit_menu.items) do
+            local c = 6
+            if (unit_menu:index() == i) c = 7
+            print(item.unit, 36, 30, 7, c)
+        end
+    end
     
 end
 
