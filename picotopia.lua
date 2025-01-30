@@ -15,8 +15,7 @@ cursor_x=flr(grid_w/2)
 cursor_y=flr(grid_h/2)
 
 -- grid item
--- { kind = 'grass|forest|water|deep-water|mountain', building={}, resource={}, unit={}
---   
+-- { kind = 'grass|forest|water|deep-water|mountain', building={},
 
 -- building
 -- { forest={}, game=nil, gold=nil }
@@ -47,6 +46,8 @@ unit_menu = menu_new({
 })
 unit_menu.visible = false
 
+move_preview = {}
+
 function shuffle(t)
     for i = #t, 2, -1 do
         local j = flr(rnd(i)) + 1
@@ -67,6 +68,10 @@ end
 
 function grid_cur()
     return grid_at(cursor_x, cursor_y)
+end
+
+function to_screenspace(x, y)
+    return {-(y-1)*8+(x-1)*8, (y-1)*4+(x-1)*4}
 end
 
 function build_perlin_map(map_w, map_h)
@@ -142,9 +147,25 @@ function _init()
     generate_map()
 end
 
+function generate_moves(dist, x, y)
+    moves = {}
+    for j=-dist,dist do
+        for i=-dist,dist do
+            local new_x = x+i
+            local new_y = y+j
+            if new_x >= 1 and new_x <= grid_w and new_y >= 1 and new_y <= grid_h and not (i == 0 and j == 0) then
+                add(moves, {new_x, new_y})
+            end
+        end
+    end
+    return moves
+end
+
 function handle_interact()
     local cell = grid_cur()
-    if cell.building.kind == 'city' and cell.building.tribe == current_turn then
+    if cell.unit.kind ~= '' and cell.unit.tribe == current_turn then
+        move_preview = generate_moves(cell.unit.mv, cursor_x, cursor_y)
+    elseif cell.building.kind == 'city' and cell.building.tribe == current_turn then
         -- troop selection menu
         unit_menu.visible = true
     end
@@ -152,13 +173,13 @@ end
 
 function _update60()
     if unit_menu.visible then
-        if btnp(2,1) then
+        if btnp(2) then
             unit_menu:up()
-        elseif btnp(3,1) then
+        elseif btnp(3) then
             unit_menu:down()
-        elseif btnp(4,1) then
+        elseif btnp(4) then
             unit_menu.visible = false
-        elseif btnp(5,1) then
+        elseif btnp(5) then
             unit_menu.visible = false
             -- spawn unit
             -- TODO take resource in account
@@ -166,15 +187,15 @@ function _update60()
         end
     else
         -- move camera
-        if btnp(0,1) then
+        if btnp(0) then
             cursor_x = max(1, cursor_x-1)
-        elseif btnp(1,1) then
+        elseif btnp(1) then
             cursor_x = min(grid_w, cursor_x+1)
-        elseif btnp(2,1) then
+        elseif btnp(2) then
             cursor_y = max(1, cursor_y-1)
-        elseif btnp(3,1) then
+        elseif btnp(3) then
             cursor_y = min(grid_h, cursor_y+1)
-        elseif btnp(5,1) then
+        elseif btnp(5) then
             -- open relevant menu
             handle_interact()
         end
@@ -184,11 +205,8 @@ end
 function draw_map()
     for j=1,grid_h do
         for i=1,grid_w do
-            -- determine color to use
-            
-            local x = -(j-1)*8+(i-1)*8
-            local y = (j-1)*4+(i-1)*4
-            draw_tile(grid_at(i, j), x, y)
+            -- determine color to user 
+            draw_tile(grid_at(i, j), unpack(to_screenspace(i, j)))
         end
     end
     
@@ -269,7 +287,16 @@ function draw_cursor(px, py)
     line(px+7, py+4, px, py+7, cursor_c)
 end
 
-function draw_ui()
+function draw_map_ui()
+    -- move preview
+    for i, cell in ipairs(move_preview) do
+        local pos = to_screenspace(unpack(cell))
+        circ(pos[1], pos[2], 4, 0)
+        circ(pos[1], pos[2], 3, 12)
+    end
+end
+
+function draw_hud()
 
     -- bottom bar showing the current selected tile
     line(0, 116, 128, 116, 7)
@@ -312,11 +339,12 @@ function _draw()
     local y = (cursor_y-1)*4+(cursor_x-1)*4
     camera(x-64, y-64)
     draw_map()
+    draw_map_ui()
     
     camera()
     draw_cursor(64, 64)
     
-    draw_ui()
+    draw_hud()
 end
 
 __gfx__
