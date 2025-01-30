@@ -52,8 +52,8 @@ function build_perlin_map(map_w, map_h)
 end
 
 function generate_map()
-    for j=0,grid_h do
-        for i=0,grid_w do
+    for j=1,grid_h do
+        for i=1,grid_w do
             if rnd(1) > 0.2 then
                 local new_tile = add(grid, {kind='grass', buildings={}})
                 -- if grass choose a random resource type
@@ -116,18 +116,17 @@ function _update60()
     end
 end
 
-function draw_map(offset_x, offset_y)
-    for j=0,grid_h do
-        for i=0,grid_w do
+function draw_map()
+    for j=1,grid_h do
+        for i=1,grid_w do
             -- determine color to use
             
-            local x = offset_x-j*8+i*8
-            local y = offset_y+j*4+i*4
-            draw_tile(grid[j*grid_w+i+1], x, y)
+            local x = -(j-1)*8+(i-1)*8
+            local y = (j-1)*4+(i-1)*4
+            draw_tile(grid_at(i, j), x, y)
         end
     end
     
-    draw_cursor(64, 64)
     
     -- TODO might want to draw all buildings after cursor
 end
@@ -180,7 +179,45 @@ function draw_cursor(px, py)
     line(px+7, py+4, px, py+7, cursor_c)
 end
 
+function draw_ui()
+
+    -- bottom bar showing the current selected tile
+    line(0, 116, 128, 116, 7)
+    line(0, 117, 128, 117, 0)
+    rectfill(0, 118, 128, 128, 1)
+    
+    local cell = grid_at(cursor_x, cursor_y)
+    if #cell.buildings == 0 then
+        print(cell.kind, 3, 120, 7)
+    else
+        local x = 3
+        for i, building in ipairs(cell.buildings) do
+            x = print(building.kind, x, 120, 7)
+            if building.kind == 'city' then
+                x = print(' ['..building.tribe..']', x, 120, 6)
+            end
+            
+            if i~=#cell.buildings then
+                x = print(', ', x, 120, 7)
+            end
+        end
+    end
+    
+    
+    local pos = tostring(cursor_x)..','..tostring(cursor_y)
+    print(pos, 125-4*#pos, 120, 7)
+    
+end
+
 function _draw()
     cls(0)
-    draw_map(-cursor_y*8+cursor_x*8+64, cursor_y*4+cursor_x*4-64)
+    local x = -(cursor_y-1)*8+(cursor_x-1)*8
+    local y = (cursor_y-1)*4+(cursor_x-1)*4
+    camera(x-64, y-64)
+    draw_map()
+    
+    camera()
+    draw_cursor(64, 64)
+    
+    draw_ui()
 end
