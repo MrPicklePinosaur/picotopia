@@ -30,6 +30,8 @@ current_turn = 'red'
 tile_colors = {
     grass={c1=11, c2=3},
     forest={c1=11, c2=3},
+    field={c1=11, c2=3},
+    mountain={c1=5},
     water={c1=12}
 }
 
@@ -75,15 +77,25 @@ function generate_map()
     for j=1,grid_h do
         for i=1,grid_w do
             if rnd(1) > 0.2 then
-                local new_tile = add(grid, {kind='grass', building={}, unit={}})
+                local new_tile = add(grid, {kind='grass', building={}, unit={}, resource={}})
                 -- if grass choose a random resource type
                 local roll = rnd(1)
-                if roll > 0.8 then
-                    -- TODO fix resources
+                if roll > 0.85 then
                     new_tile.kind = 'forest'
+                    if rnd(1) > 0.8 then
+                       new_tile.resource.kind = 'animal'
+                    end
+                elseif roll > 0.7 then
+                    new_tile.kind = 'mountain'
+                elseif roll > 0.6 then
+                    new_tile.kind = 'field'
+                else
+                    if rnd(1) > 0.9 then
+                       new_tile.resource.kind = 'fruit'
+                    end
                 end
             else
-                add(grid, {kind='water', building={}, unit={}})
+                add(grid, {kind='water', building={}, unit={}, resource={}})
             end
         end
     end
@@ -202,9 +214,20 @@ function draw_tile(tile, x, y)
         line(x+7, y+4, x, y+7, c2)
     end
  
-    if tile.kind == 'forest' then
-        -- placeholder art
-        circfill(x, y+4, 4, 7)
+    -- detailed tiles
+    if tile.kind == 'field' then
+        sspr(0, 32, 16, 16, x-7, y-8)
+    elseif tile.kind == 'forest' then
+        sspr(16, 32, 16, 16, x-7, y-8)
+    elseif tile.kind == 'mountain' then
+        sspr(48, 32, 16, 16, x-7, y-8)
+    end
+    
+    -- tile resources
+    if tile.resource.kind == 'fruit' then
+        sspr(32, 32, 16, 16, x-7, y-8)
+    elseif tile.resource.kind == 'animal' then
+        --sspr(32, 32, 16, 16, x-7, y-8)
     end
     
     draw_building(tile.building, x, y)
@@ -214,13 +237,11 @@ end
 
 function draw_building(building, x, y)
     if building.kind == 'city' then       
-        local c = 5
         if building.tribe == 'red' then
-            c = 8
+            sspr(16, 16, 16, 16, x-7, y-8)
         elseif building.tribe == 'blue' then
-            c = 12
+            
         end
-        rect(x-2, y+2, x+2, y+6, c)
     end
 end
 
@@ -233,11 +254,9 @@ function draw_unit(unit, x, y)
     end
     
     if unit.kind == 'warrior' then
-        circfill(x, y+4, 3, 0)
-        circfill(x, y+4, 2, c)
+        spr(0, x-4, y-3)
     elseif unit.kind == 'rider' then
-        circfill(x, y+4, 3, 7)
-        circfill(x, y+4, 2, c)
+        spr(1, x-4, y-3)
     end
 end
 
@@ -316,7 +335,7 @@ __gfx__
 0000000000000000000000000000000000000000000000000088888800008888888800000000444444444000000000dd88800000000000000000000000000000
 000000000000000000000000000000000000000000000000008888880000888888800000000044545454000000000000d8800000000000000000000000000000
 00000000000000000000000000000000000000000000000000044440000004444400000000000444444000000000000050500000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000x 
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000080080000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000009080080900000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000008008000000000000989989000000000000000000000000000000000000
