@@ -20,9 +20,10 @@ cursor_y=flr(grid_h/2)
 -- building
 -- { forest={}, game=nil, gold=nil }
 
+-- spritesheet is index of player specific spritesheet in memory
 players = {
-    {tribe='red'},
-    {tribe='blue'}
+    red={tribe='red', spritesheet=0},
+    blue={tribe='blue', spritesheet=1}
 }
 current_turn = 'red'
 
@@ -128,16 +129,37 @@ function generate_map()
 
     shuffle(quadrants)
     
-    for i, player in ipairs(players) do
+    local capitals = {}
+    for _, player in ipairs(players) do
         local cap_x = flr(rnd(quad_w)) + quadrants[i][1]
         local cap_y = flr(rnd(quad_h)) + quadrants[i][2]
         
         -- insert player capital into map
         -- TODO generste a goofy name
         local cell = grid_at(cap_x, cap_y)
-        
+        -- capitals must be on grassland
+        cell = {kind='grass', building={}, unit={}, resource={}}
         cell.building = {kind='city', level=1, tribe=player.tribe, capital=true}
+        add(capitals, {x=cap_x, y=cap_y, tribe=player.tribe})
     end
+    
+    -- assign all cells to be of tribe its closest to
+    for j=1,grid_h do
+        for i=1,grid_w do
+            -- gotta do all this manually TT
+            local closest_cap = nil
+            local small_d = 10000000
+            for _, cap in ipairs(capitals) do
+                local d = sqrt((j-cap.y)^2+(i-cap.x)^2)
+                if d < small_d then
+                    small_d = d
+                    closest_cap = cap.tribe
+                end
+            end
+            grid_at(i, j).tribe = closest_cap
+        end
+    end
+    
     
 end
 
@@ -283,19 +305,24 @@ function draw_tile(tile, x, y)
     end
  
     -- detailed tiles
+    local sprite_offset = 0
+    if tile.tribe ~= nil then
+        sprite_offset = players[tile.tribe].spritesheet * 48
+    end
+    
     if tile.kind == 'field' then
-        sspr(0, 32, 16, 16, x-7, y-8)
+        sspr(0, 32+sprite_offset, 16, 16, x-7, y-8)
     elseif tile.kind == 'forest' then
-        sspr(16, 32, 16, 16, x-7, y-8)
+        sspr(16, 32+sprite_offset, 16, 16, x-7, y-8)
     elseif tile.kind == 'mountain' then
-        sspr(48, 32, 16, 16, x-7, y-8)
+        sspr(64, 32+sprite_offset, 16, 16, x-7, y-8)
     end
     
     -- tile resources
     if tile.resource.kind == 'fruit' then
-        sspr(32, 32, 16, 16, x-7, y-8)
+        sspr(32, 32+sprite_offset, 16, 16, x-7, y-8)
     elseif tile.resource.kind == 'animal' then
-        --sspr(32, 32, 16, 16, x-7, y-8)
+        sspr(48, 32+sprite_offset, 16, 16, x-7, y-8)
     end
     
     draw_building(tile.building, x, y)
