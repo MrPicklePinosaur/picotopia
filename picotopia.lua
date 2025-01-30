@@ -130,7 +130,8 @@ function generate_map()
     shuffle(quadrants)
     
     local capitals = {}
-    for _, player in ipairs(players) do
+    local i = 1
+    for _, player in pairs(players) do
         local cap_x = flr(rnd(quad_w)) + quadrants[i][1]
         local cap_y = flr(rnd(quad_h)) + quadrants[i][2]
         
@@ -141,6 +142,7 @@ function generate_map()
         cell = {kind='grass', building={}, unit={}, resource={}}
         cell.building = {kind='city', level=1, tribe=player.tribe, capital=true}
         add(capitals, {x=cap_x, y=cap_y, tribe=player.tribe})
+        i += 1
     end
     
     -- assign all cells to be of tribe its closest to
@@ -148,7 +150,7 @@ function generate_map()
         for i=1,grid_w do
             -- gotta do all this manually TT
             local closest_cap = nil
-            local small_d = 10000000
+            local small_d = 1000
             for _, cap in ipairs(capitals) do
                 local d = sqrt((j-cap.y)^2+(i-cap.x)^2)
                 if d < small_d then
@@ -159,8 +161,6 @@ function generate_map()
             grid_at(i, j).tribe = closest_cap
         end
     end
-    
-    
 end
 
 function spawn_unit(kind, tribe, x, y)
@@ -305,10 +305,7 @@ function draw_tile(tile, x, y)
     end
  
     -- detailed tiles
-    local sprite_offset = 0
-    if tile.tribe ~= nil then
-        sprite_offset = players[tile.tribe].spritesheet * 48
-    end
+    local sprite_offset = players[tile.tribe].spritesheet * 48
     
     if tile.kind == 'field' then
         sspr(0, 32+sprite_offset, 16, 16, x-7, y-8)
