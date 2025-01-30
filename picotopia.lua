@@ -15,7 +15,7 @@ cursor_x=flr(grid_w/2)
 cursor_y=flr(grid_h/2)
 
 -- grid item
--- { kind = 'grass|forest|water|deep-water|mountain', building={}, resource={}
+-- { kind = 'grass|forest|water|deep-water|mountain', building={}, resource={}, unit={}
 --   
 
 -- building
@@ -31,6 +31,11 @@ tile_colors = {
     grass={c1=11, c2=3},
     forest={c1=11, c2=3},
     water={c1=12}
+}
+
+units={
+    warrior={max_hp=10, cost=2, atk=2, def=2, mv=1, rng=1, skills={'dash', 'fortify'}},
+    rider={max_hp=10, cost=3, atk=2, def=1, mv=2, rng=1, skills={'dash', 'escape', 'fortify'}},
 }
 
 -- menus
@@ -70,7 +75,7 @@ function generate_map()
     for j=1,grid_h do
         for i=1,grid_w do
             if rnd(1) > 0.2 then
-                local new_tile = add(grid, {kind='grass', building={}})
+                local new_tile = add(grid, {kind='grass', building={}, unit={}})
                 -- if grass choose a random resource type
                 local roll = rnd(1)
                 if roll > 0.8 then
@@ -78,7 +83,7 @@ function generate_map()
                     new_tile.kind = 'forest'
                 end
             else
-                add(grid, {kind='water', building={}})
+                add(grid, {kind='water', building={}, unit={}})
             end
         end
     end
@@ -112,6 +117,15 @@ function generate_map()
     
 end
 
+function spawn_unit(kind, tribe, x, y)
+    local cell = grid_at(x, y)
+    local new_unit = units[kind]
+    new_unit.kind = kind
+    new_unit.tribe = tribe
+    new_unit.hp = max_hp
+    cell.unit = new_unit
+end
+
 function _init()
     generate_map()
 end
@@ -132,6 +146,11 @@ function _update60()
             unit_menu:down()
         elseif btnp(4,1) then
             unit_menu.visible = false
+        elseif btnp(5,1) then
+            unit_menu.visible = false
+            -- spawn unit
+            -- TODO take resource in account
+            spawn_unit(unit_menu:cur().unit, current_turn, cursor_x, cursor_y)
         end
     else
         -- move camera
@@ -189,10 +208,11 @@ function draw_tile(tile, x, y)
     end
     
     draw_building(tile.building, x, y)
+    
+    draw_unit(tile.unit, x, y)
 end
 
 function draw_building(building, x, y)
-    
     if building.kind == 'city' then       
         local c = 5
         if building.tribe == 'red' then
@@ -200,7 +220,24 @@ function draw_building(building, x, y)
         elseif building.tribe == 'blue' then
             c = 12
         end
-        rectfill(x-2, y+2, x+2, y+6, c)
+        rect(x-2, y+2, x+2, y+6, c)
+    end
+end
+
+function draw_unit(unit, x, y)
+    local c = 5
+    if unit.tribe == 'red' then
+        c = 8
+    elseif unit.tribe == 'blue' then
+        c = 12
+    end
+    
+    if unit.kind == 'warrior' then
+        circfill(x, y+4, 3, 0)
+        circfill(x, y+4, 2, c)
+    elseif unit.kind == 'rider' then
+        circfill(x, y+4, 3, 7)
+        circfill(x, y+4, 2, c)
     end
 end
 
@@ -244,7 +281,7 @@ function draw_ui()
         for i, item in ipairs(unit_menu.items) do
             local c = 6
             if (unit_menu:index() == i) c = 7
-            print(item.unit, 36, 30, 7, c)
+            print(item.unit, 36, 30+(i-1)*8, c)
         end
     end
     
