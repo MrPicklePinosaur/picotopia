@@ -47,7 +47,13 @@ unit_menu = menu_new({
 unit_menu.visible = false
 
 move_preview = {}
+-- the position of the unit we wish to move
+move_unit_pos = nil
 
+-- cursor mode = interact|move
+cursor_mode = 'interact'
+
+-- helpers
 function shuffle(t)
     for i = #t, 2, -1 do
         local j = flr(rnd(i)) + 1
@@ -78,6 +84,7 @@ function build_perlin_map(map_w, map_h)
 
 end
 
+-- mapgen
 function generate_map()
     for j=1,grid_h do
         for i=1,grid_w do
@@ -143,6 +150,25 @@ function spawn_unit(kind, tribe, x, y)
     cell.unit = new_unit
 end
 
+function request_move_unit(unit_pos)
+    move_unit_pos = unit_pos
+    local cell = grid_at(unpack(move_unit_pos))
+    move_preview = generate_moves(cell.unit.mv, unpack(unit_pos))
+end
+
+function cancel_move_unit()
+    move_unit_pos = nil
+    move_preview = {}
+end
+
+function confirm_move_unit(new_pos)
+    local cell = grid_at(unpack(move_unit_pos))
+    local unit_temp = cell.unit
+    cell.unit = {}
+    grid_at(unpack(new_pos)).unit = unit_temp
+    cancel_move_unit()
+end
+
 function _init()
     generate_map()
 end
@@ -161,30 +187,50 @@ function generate_moves(dist, x, y)
     return moves
 end
 
-function handle_interact()
+function update_unit_menu()
+    if btnp(2) then
+        unit_menu:up()
+    elseif btnp(3) then
+       unit_menu:down()
+    elseif btnp(4) then
+        unit_menu.visible = false
+    elseif btnp(5) then
+        unit_menu.visible = false
+        -- spawn unit
+        -- TODO take resource in account
+        spawn_unit(unit_menu:cur().unit, current_turn, cursor_x, cursor_y)
+    end
+end
+
+-- handle clicking when in interact mode
+function handle_cursor_interact()
     local cell = grid_cur()
     if cell.unit.kind ~= '' and cell.unit.tribe == current_turn then
-        move_preview = generate_moves(cell.unit.mv, cursor_x, cursor_y)
+        request_move_unit({cursor_x, cursor_y})
+        -- TODO sanity check that we have valid moves
+        cursor_mode = 'move'
     elseif cell.building.kind == 'city' and cell.building.tribe == current_turn then
         -- troop selection menu
         unit_menu.visible = true
     end
 end
 
+-- handle clicking when in unit move mode
+function handle_cursor_move()
+    -- check if move location is valid
+    for _, pos in ipairs(move_preview) do
+        if pos[1] == cursor_x and pos[2] == cursor_y then
+            -- move the unit
+            confirm_move_unit({cursor_x, cursor_y})
+            cursor_mode = 'interact'
+        end
+    end
+    -- TODO not valid, do some animation?
+end
+
 function _update60()
     if unit_menu.visible then
-        if btnp(2) then
-            unit_menu:up()
-        elseif btnp(3) then
-            unit_menu:down()
-        elseif btnp(4) then
-            unit_menu.visible = false
-        elseif btnp(5) then
-            unit_menu.visible = false
-            -- spawn unit
-            -- TODO take resource in account
-            spawn_unit(unit_menu:cur().unit, current_turn, cursor_x, cursor_y)
-        end
+        update_unit_menu()
     else
         -- move camera
         if btnp(0) then
@@ -197,7 +243,11 @@ function _update60()
             cursor_y = min(grid_h, cursor_y+1)
         elseif btnp(5) then
             -- open relevant menu
-            handle_interact()
+            if cursor_mode == 'interact' then
+                handle_cursor_interact()
+            elseif cursor_mode == 'move' then
+                handle_cursor_move()
+            end
         end
     end
 end
