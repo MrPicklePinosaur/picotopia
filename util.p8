@@ -24,3 +24,7 @@ function clone_table(orig)
     end
     return copy
 end
+
+function round(x)
+    return flr(x + 0.5)
+end

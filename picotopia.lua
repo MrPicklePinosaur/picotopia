@@ -215,10 +215,15 @@ function spawn_unit(kind, tribe, x, y)
     local new_unit = clone_table(units[kind])
     new_unit.kind = kind
     new_unit.tribe = tribe
-    new_unit.hp = max_hp
+    new_unit.hp = new_unit.max_hp
     new_unit.can_move = false -- all units can't move when spawned (unless has special trait)
 
     cell.unit = new_unit
+end
+
+function kill_unit(pos)
+    local cell = grid_at(unpack(pos))
+    cell.unit = {}
 end
 
 function request_move_unit(unit_pos)
@@ -248,6 +253,43 @@ function confirm_move_unit(new_pos)
     cancel_move_unit()
 end
 
+function confirm_attack_unit(enemy_pos)
+    -- determine participating units
+    local attacking = grid_at(unpack(move_unit_pos)).unit
+    local defending = grid_at(unpack(enemy_pos)).unit
+
+    -- compute the damage
+    -- formulae from https://polytopia.fandom.com/wiki/Combat
+    local attack_force = attacking.atk * (attacking.hp / attacking.max_hp)
+    -- TODO include defending bonus
+    local def_bonus = 1
+    local defence_force = defending.def * (defending.hp / defending.max_hp) * def_bonus
+    local total_damage = attack_force + defence_force
+
+    local attack_res = round((attack_force / total_damage) * attacking.atk * 4.5)
+    local defence_res = round((defence_force / total_damage) * defending.def * 4.5)
+
+    -- apply the damage
+    defending.hp = max(0, defending.hp - attack_res)
+    printh('attacker dealt '..tostring(attack_res)..' damage, defender has '..tostring(defending.hp)..'/'..tostring(defending.max_hp))
+    if defending.hp <= 0 then
+
+        kill_unit(enemy_pos)
+
+        -- if we kill the enemy, do we move to take it's place?
+        -- TODO more complex behavior that respects movement rules, ie don't move into water
+        confirm_move_unit(enemy_pos)
+    end
+
+    attacking.hp = max(0, attacking.hp - defence_res)
+    printh('defernder dealt '..tostring(defence_res)..' damage, attacker has '..tostring(attacking.hp)..'/'..tostring(attacking.max_hp))
+    if attacking.hp <= 0 then
+        kill_unit(move_unit_pos)
+    end
+
+    cancel_move_unit()
+end
+
 -- at the beginning of turn, allow all units to move
 function reset_unit_moved(tribe)
     -- TODO sadly we need to look through the whole map for now
@@ -261,7 +303,17 @@ end
 function _init()
     generate_map()
 
+    -- TEMP setup scenario
+    spawn_unit('rider', 'red', 8, 8)
+    spawn_unit('rider', 'blue', 8, 9)
+
+    ----------
+
     on_start_turn()
+end
+
+function cell_attack_rules(cell, x, y)
+    return true
 end
 
 -- return true or false if the cell is allowed to be moved to
@@ -285,7 +337,10 @@ function cell_move_rules(cell, x, y)
 end
 
 function generate_moves(unit, x, y)
-    local dist = unit.mv
+    local mv_dist = unit.mv
+    local atk_dist = unit.rng
+
+    local dist = max(mv_dist, atk_dist)
 
     moves = {}
     for j=-dist,dist do
@@ -294,8 +349,13 @@ function generate_moves(unit, x, y)
             local new_y = y+j
             local new_cell = grid_at(new_x, new_y)
 
-            if not (i == 0 and j == 0) and cell_move_rules(new_cell, new_x, new_y) then
-                add(moves, {new_x, new_y})
+            if not (i == 0 and j == 0) then
+                -- attack takes precedence
+                if (i >= -atk_dist and i <= atk_dist and j >= -atk_dist and j <= atk_dist) and cell_attack_rules(new_cell, new_x, new_y) and new_cell.unit.kind ~= nil and new_cell.unit.tribe ~= current_tribe() then
+                    add(moves, {new_x, new_y, kind='attack'})
+                elseif (i >= -mv_dist and i <= mv_dist and j >= -mv_dist and j <= mv_dist) and cell_move_rules(new_cell, new_x, new_y) then
+                    add(moves, {new_x, new_y, kind='move'})
+                end
             end
         end
     end
@@ -388,8 +448,13 @@ function handle_cursor_move()
     -- check if move location is valid
     for _, pos in ipairs(move_preview) do
         if pos[1] == cursor_x and pos[2] == cursor_y then
-            -- move the unit
-            confirm_move_unit({cursor_x, cursor_y})
+            -- move the unit or use it to attack
+            if pos.kind == 'move' then
+                confirm_move_unit({cursor_x, cursor_y})
+            elseif pos.kind == 'attack' then
+                -- calculate damage exchange
+                confirm_attack_unit({cursor_x, cursor_y})
+            end
             cursor_mode = 'interact'
         end
     end
@@ -513,8 +578,15 @@ function draw_map_ui()
     -- move preview
     for i, cell in ipairs(move_preview) do
         local pos = to_screenspace(unpack(cell))
+        local c = 0
+        if cell.kind == 'move' then
+            c = 12
+        elseif cell.kind == 'attack' then
+            c = 8
+        end
+
         circ(pos[1], pos[2], 4, 0)
-        circ(pos[1], pos[2], 3, 12)
+        circ(pos[1], pos[2], 3, c)
     end
 end
 
