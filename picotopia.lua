@@ -19,31 +19,36 @@ cursor_y=flr(grid_h/2)
 -- { kind = 'grass|forest|water|deep-water|mountain', building={},
 
 -- building
--- { forest={}, game=nil, gold=nil }
+buildings = {
+    port={kind='port', cost=7},
+    lumber={kind='lumber hut', cost=3},
+    farm={kind='farm', cost=5},
+}
+-- {kind='city', level=1, tribe=<tribe>, capital=true}
 
 tech = {
-    hunting=false,
-    forestry=false,
-    archery=false,
+    hunting=true,
+    forestry=true,
+    archery=true,
 
-    fishing=false,
-    ramming=false,
-    sailing=false,
+    fishing=true,
+    ramming=true,
+    sailing=true,
 
-    climbing=false,
-    mining=false,
+    climbing=true,
+    mining=true,
 
-    organization=false,
-    farming=false,
-    strategy=false,
+    organization=true,
+    farming=true,
+    strategy=true,
 
-    riding=false,
+    riding=true,
 }
 
 -- spritesheet is index of player specific spritesheet in memory
 players = {
-    {tribe='red', camera={0, 0}, coins=0, tech=clone_table(tech)},
-    {tribe='blue', camera={0, 0}, coins=0, tech=clone_table(tech)},
+    {tribe='red', camera={0, 0}, coins=100, tech=clone_table(tech)},
+    {tribe='blue', camera={0, 0}, coins=100, tech=clone_table(tech)},
     -- white={tribe='white', spritesheet=2},
     -- yellow={tribe='yellow', spritesheet=3},
 }
@@ -80,6 +85,7 @@ action_menu.visible = true
 tile_menu = menu_new({})
 tile_menu.visible = false
 
+-- TODO filter down the ones we can actually spawn
 unit_menu = menu_new({
     {unit='warrior'},
     {unit='rider'},
@@ -105,8 +111,25 @@ function grid_cur()
     return grid_at(cursor_x, cursor_y)
 end
 
+function current_player()
+    return players[current_turn]
+end
+
 function current_tribe()
     return players[current_turn].tribe
+end
+
+function current_tech()
+    return players[current_turn].tech
+end
+
+-- check if the current player has at least this amount of coins
+function has_coins(amount)
+    return players[current_turn].coins >= amount
+end
+
+function spend_coins(amount)
+    players[current_turn].coins = max(0, players[current_turn].coins-amount)
 end
 
 function to_screenspace(x, y)
@@ -370,7 +393,7 @@ function cell_move_rules(cell, x, y)
     end
 
     -- only move to mountains if tech is unlocked
-    if cell.kind == 'mountain' and not players[current_turn].tech.climbing then
+    if cell.kind == 'mountain' and not current_tech().climbing then
         return false
     end
 
@@ -436,7 +459,11 @@ function update_unit_menu()
         unit_menu.visible = false
         -- spawn unit
         -- TODO take resource in account
-        spawn_unit(unit_menu:cur().unit, current_tribe(), cursor_x, cursor_y)
+        local unit = unit_menu:cur().unit
+        if has_coins(units[unit].cost) then
+            spawn_unit(unit, current_tribe(), cursor_x, cursor_y)
+            spend_coins(units[unit].cost)
+        end
     end
 end
 
@@ -449,7 +476,7 @@ function handle_cursor_interact()
 
     -- move unit if there is one
     if cell.unit.kind ~= nil and cell.unit.tribe == current_tribe() then
-        add(tile_menu_items, {label='mobolize troop', fn=function()
+        add(tile_menu_items, {label='mobolize troop', auto=true, fn=function()
             request_move_unit({cursor_x, cursor_y})
             -- TODO sanity check that we have valid moves
             cursor_mode = 'move'
@@ -459,7 +486,7 @@ function handle_cursor_interact()
 
     -- interact with city if no unit on top
     if cell.building.kind == 'city' and cell.building.tribe == current_tribe() and cell.unit.kind == nil then
-        add(tile_menu_items, {label='train troops', fn=function()
+        add(tile_menu_items, {label='train troops', auto=true, fn=function()
             -- troop selection menu
             unit_menu.visible = true
         end})
@@ -470,7 +497,7 @@ function handle_cursor_interact()
     -- should technically implement feature that unit needs to have arrived to this city
     -- last turn
     if cell.building.kind == 'city' and cell.building.tribe ~= current_tribe() and cell.unit.kind ~= nil and cell.unit.can_move then
-        add(tile_menu_items, {label='capture city', fn=function()
+        add(tile_menu_items, {label='capture city', auto=false, fn=function()
             cell.building.tribe = current_tribe() 
             -- promote villages into level 1 cities
             if cell.building.level == 0 then
@@ -481,6 +508,35 @@ function handle_cursor_interact()
         end})
     end
 
+    -- TODO also check inside territory
+    -- TODO can make building code less repetitive?
+    if current_tech().forestry and cell.kind == 'forest' and cell.building.kind == nil then
+        add(tile_menu_items, {label='build lumber hut', auto=false, fn=function()
+            if has_coins(buildings.lumber.cost) then
+                cell.building = clone_table(buildings.lumber)
+                cell.kind = 'grass' -- converts forest into grassland
+                spend_coins(buildings.lumber.cost)
+            end
+        end})
+    end
+
+    if  current_tech().farming and cell.kind == 'field' and cell.building.kind == nil then
+        add(tile_menu_items, {label='build farm', auto=false, fn=function()
+            if has_coins(buildings.lumber.farm) then
+                cell.building = clone_table(buildings.farm)
+                spend_coins(buildings.farm.cost)
+            end
+        end})
+    end
+
+    if current_tech().fishing and cell.kind == 'water' and cell.building.kind == nil then
+        add(tile_menu_items, {label='build port', auto=false, fn=function()
+            if has_coins(buildings.port.cost) then
+                cell.building = clone_table(buildings.port)
+                spend_coins(buildings.port.cost)
+            end
+        end})
+    end
 
     -- ignore if there are no interactions
     if #tile_menu_items == 0 then
@@ -488,7 +544,7 @@ function handle_cursor_interact()
     end
 
     -- automatically accept the action if there is only one option
-    if #tile_menu_items == 1 then
+    if #tile_menu_items == 1 and tile_menu_items[1].auto then
         tile_menu_items[1].fn()
         return
     end
@@ -611,6 +667,12 @@ function draw_building(building, x, y, tribe)
     if building.kind == 'city' then       
         local level_offset = building.level * 16
         sspr(level_offset, 16+sprite_offset, 16, 16, x-7, y-8)
+    elseif building.kind == 'lumber hut' then
+        sspr(0, 96, 16, 16, x-7, y-8)
+    elseif building.kind == 'farm' then
+        sspr(16, 96, 16, 16, x-7, y-8)
+    elseif building.kind == 'port' then
+        sspr(32, 96, 16, 16, x-7, y-8)
     end
 end
 
@@ -674,6 +736,7 @@ function draw_hud()
 
     -- draw current turn
     print('current turn '..current_tribe(), 0, 0, 7)
+    print('coins '..tostring(players[current_turn].coins))
     
     -- menus
     if action_menu.visible then
@@ -724,6 +787,7 @@ function _draw()
     
     draw_hud()
 end
+
 __gfx__
 00000000448008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 04480080448dd8000800400008050050660800800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
