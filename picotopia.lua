@@ -23,7 +23,9 @@ cursor_y=flr(grid_h/2)
 -- spritesheet is index of player specific spritesheet in memory
 players = {
     red={tribe='red', spritesheet=0},
-    blue={tribe='blue', spritesheet=1}
+    blue={tribe='blue', spritesheet=1},
+    -- white={tribe='white', spritesheet=2},
+    -- yellow={tribe='yellow', spritesheet=3},
 }
 current_turn = 'red'
 
@@ -79,6 +81,10 @@ end
 
 function to_screenspace(x, y)
     return {-(y-1)*8+(x-1)*8, (y-1)*4+(x-1)*4}
+end
+
+function get_spriteoffset(tribe)
+    return players[tribe].spritesheet * 48
 end
 
 function build_perlin_map(map_w, map_h)
@@ -139,7 +145,7 @@ function generate_map()
         -- TODO generste a goofy name
         local cell = grid_at(cap_x, cap_y)
         -- capitals must be on grassland
-        cell = {kind='grass', building={}, unit={}, resource={}}
+        cell.kind = 'grass'
         cell.building = {kind='city', level=1, tribe=player.tribe, capital=true}
         add(capitals, {x=cap_x, y=cap_y, tribe=player.tribe})
         i += 1
@@ -305,7 +311,7 @@ function draw_tile(tile, x, y)
     end
  
     -- detailed tiles
-    local sprite_offset = players[tile.tribe].spritesheet * 48
+    local sprite_offset = get_spriteoffset(tile.tribe)
     
     if tile.kind == 'field' then
         sspr(0, 32+sprite_offset, 16, 16, x-7, y-8)
@@ -322,33 +328,28 @@ function draw_tile(tile, x, y)
         sspr(48, 32+sprite_offset, 16, 16, x-7, y-8)
     end
     
-    draw_building(tile.building, x, y)
+    draw_building(tile.building, x, y, tile.tribe)
     
-    draw_unit(tile.unit, x, y)
+    if tile.unit.kind ~= nil then
+        draw_unit(tile.unit, x, y)
+    end
 end
 
-function draw_building(building, x, y)
+function draw_building(building, x, y, tribe)
+    local sprite_offset = get_spriteoffset(tribe)
+
     if building.kind == 'city' then       
-        if building.tribe == 'red' then
-            sspr(16, 16, 16, 16, x-7, y-8)
-        elseif building.tribe == 'blue' then
-            
-        end
+        sspr(16, 16+sprite_offset, 16, 16, x-7, y-8)
     end
 end
 
 function draw_unit(unit, x, y)
-    local c = 5
-    if unit.tribe == 'red' then
-        c = 8
-    elseif unit.tribe == 'blue' then
-        c = 12
-    end
-    
+    local sprite_offset = get_spriteoffset(unit.tribe)
+
     if unit.kind == 'warrior' then
-        spr(0, x-4, y-3)
+        sspr(0, sprite_offset, 8, 8, x-4, y-3)
     elseif unit.kind == 'rider' then
-        spr(1, x-4, y-3)
+        sspr(8, sprite_offset, 8, 8, x-4, y-3)
     end
 end
 
