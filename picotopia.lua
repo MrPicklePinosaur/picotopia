@@ -61,6 +61,10 @@ action_menu = menu_new({
 })
 action_menu.visible = true
 
+-- menu to show all possible actions on a tile
+tile_menu = menu_new({})
+tile_menu.visible = false
+
 unit_menu = menu_new({
     {unit='warrior'},
     {unit='rider'},
@@ -263,7 +267,7 @@ end
 -- return true or false if the cell is allowed to be moved to
 function cell_move_rules(cell, x, y)
     -- stay within bounds of map
-    if x < 1 or x > grid_w or y < 1 or y > grid_h or (i == 0 and j == 0) then
+    if x < 1 or x > grid_w or y < 1 or y > grid_h then
         return false
     end
 
@@ -290,7 +294,7 @@ function generate_moves(unit, x, y)
             local new_y = y+j
             local new_cell = grid_at(new_x, new_y)
 
-            if cell_move_rules(new_cell, new_x, new_y) then
+            if not (i == 0 and j == 0) and cell_move_rules(new_cell, new_x, new_y) then
                 add(moves, {new_x, new_y})
             end
         end
@@ -306,6 +310,17 @@ function update_action_menu()
     elseif btnp(5) then
         action_menu.visible = false
         action_menu:cur().fn()
+    end
+end
+
+function update_tile_menu()
+    if btnp(2) then
+        tile_menu:up()
+    elseif btnp(3) then
+        tile_menu:down()
+    elseif btnp(5) then
+        tile_menu.visible = false
+        tile_menu:cur().fn()
     end
 end
 
@@ -327,14 +342,45 @@ end
 -- handle clicking when in interact mode
 function handle_cursor_interact()
     local cell = grid_cur()
+
+    -- show menu for all possible interactions
+    local tile_menu_items = {}
+
+    -- move unit if there is one
     if cell.unit.kind ~= nil and cell.unit.tribe == current_tribe() then
-        request_move_unit({cursor_x, cursor_y})
-        -- TODO sanity check that we have valid moves
-        cursor_mode = 'move'
-    elseif cell.building.kind == 'city' and cell.building.tribe == current_tribe() then
-        -- troop selection menu
-        unit_menu.visible = true
+        add(tile_menu_items, {label='mobolize troop', fn=function()
+            request_move_unit({cursor_x, cursor_y})
+            -- TODO sanity check that we have valid moves
+            cursor_mode = 'move'
+        end})
+
     end
+
+    -- interact with city if no unit on top
+    if cell.building.kind == 'city' and cell.building.tribe == current_tribe() and cell.unit.kind == nil then
+        add(tile_menu_items, {label='train troops', fn=function()
+            -- troop selection menu
+            unit_menu.visible = true
+        end})
+    end
+
+    -- ignore if there are no interactions
+    if #tile_menu_items == 0 then
+        return
+    end
+
+    -- automatically accept the action if there is only one option
+    if #tile_menu_items == 1 then
+        tile_menu_items[1].fn()
+        return
+    end
+
+    add(tile_menu_items, {label='cancel', fn=function()
+        tile_menu.visible = false
+    end})
+
+    tile_menu = menu_new(tile_menu_items)
+    tile_menu.visible = true
 end
 
 -- handle clicking when in unit move mode
@@ -353,6 +399,8 @@ end
 function _update60()
     if action_menu.visible then
         update_action_menu()
+    elseif tile_menu.visible then
+        update_tile_menu()
     elseif unit_menu.visible then
         update_unit_menu()
     else
@@ -508,6 +556,17 @@ function draw_hud()
         end
     end
     
+    if tile_menu.visible then
+        rect(31, 19, 97, 61, 7)
+        rectfill(32, 20, 96, 60, 1)
+        
+        for i, item in ipairs(tile_menu.items) do
+            local c = 6
+            if (tile_menu:index() == i) c = 7
+            print(item.label, 36, 30+(i-1)*8, c)
+        end
+    end
+
     if unit_menu.visible then
         rect(31, 19, 97, 61, 7)
         rectfill(32, 20, 96, 60, 1)
