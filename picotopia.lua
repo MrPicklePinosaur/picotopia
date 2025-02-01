@@ -3,6 +3,7 @@ version 42
 __lua__
 
 #include menu.p8
+#include util.p8
 
 -- map sizes 11, 14, 16, 18, 20 or 30
 grid_w = 16
@@ -20,10 +21,14 @@ cursor_y=flr(grid_h/2)
 -- building
 -- { forest={}, game=nil, gold=nil }
 
+tech = {
+    climbing=false
+}
+
 -- spritesheet is index of player specific spritesheet in memory
 players = {
-    {tribe='red', camera={0, 0}},
-    {tribe='blue', camera={0, 0}},
+    {tribe='red', camera={0, 0}, coins=0, tech=clone_table(tech)},
+    {tribe='blue', camera={0, 0}, coins=0, tech=clone_table(tech)},
     -- white={tribe='white', spritesheet=2},
     -- yellow={tribe='yellow', spritesheet=3},
 }
@@ -73,29 +78,6 @@ move_unit_pos = nil
 cursor_mode = 'interact'
 
 -- helpers
-function shuffle(t)
-    for i = #t, 2, -1 do
-        local j = flr(rnd(i)) + 1
-        t[i], t[j] = t[j], t[i]
-    end
-end
-
-function panic(str)
-    cls(0)
-    print(str)
-    while true do
-    end
-end
-
-function clone_table(orig)
-    if type(orig) ~= "table" then return orig end
-    local copy = {}
-    for k, v in pairs(orig) do
-        copy[k] = clone_table(v)
-    end
-    return copy
-end
-
 function grid_at(x, y)
     return grid[(y-1)*grid_w+(x-1)+1]
 end
@@ -127,10 +109,12 @@ function on_start_turn()
     -- restore camera position
     cursor_x, cursor_y = unpack(players[current_turn].camera)
 
-    -- reset UI
+    -- reset UI / state
     action_menu.visible = true
+    cursor_mode = 'interact'
 
     -- restore unit / city states
+    reset_unit_moved(current_tribe())
 
 end
 
@@ -228,13 +212,22 @@ function spawn_unit(kind, tribe, x, y)
     new_unit.kind = kind
     new_unit.tribe = tribe
     new_unit.hp = max_hp
+    new_unit.can_move = false -- all units can't move when spawned (unless has special trait)
+
     cell.unit = new_unit
 end
 
 function request_move_unit(unit_pos)
     move_unit_pos = unit_pos
     local cell = grid_at(unpack(move_unit_pos))
-    move_preview = generate_moves(cell.unit.mv, unpack(unit_pos))
+
+    -- only allow unit to move if 
+    move_preview = generate_moves(cell.unit, unpack(unit_pos))
+    if cell.unit.can_move then
+        move_preview = generate_moves(cell.unit, unpack(unit_pos))
+    else
+        move_preview = {}
+    end
 end
 
 function cancel_move_unit()
@@ -245,9 +238,20 @@ end
 function confirm_move_unit(new_pos)
     local cell = grid_at(unpack(move_unit_pos))
     local unit_temp = cell.unit
+    unit_temp.can_move = false -- only move once per turn
     cell.unit = {}
     grid_at(unpack(new_pos)).unit = unit_temp
     cancel_move_unit()
+end
+
+-- at the beginning of turn, allow all units to move
+function reset_unit_moved(tribe)
+    -- TODO sadly we need to look through the whole map for now
+    for _, tile in ipairs(grid) do
+        if tile.unit.kind ~= nil and tile.unit.tribe == tribe then
+            tile.unit.can_move = true
+        end
+    end
 end
 
 function _init()
@@ -256,13 +260,37 @@ function _init()
     on_start_turn()
 end
 
-function generate_moves(dist, x, y)
+-- return true or false if the cell is allowed to be moved to
+function cell_move_rules(cell, x, y)
+    -- stay within bounds of map
+    if x < 1 or x > grid_w or y < 1 or y > grid_h or (i == 0 and j == 0) then
+        return false
+    end
+
+    -- don't allow moving in water
+    if cell.kind == 'water' or cell.kind == 'deep-water' then
+        return false
+    end
+
+    -- only move to mountains if tech is unlocked
+    if cell.kind == 'mountain' and not players[current_turn].tech.climbing then
+        return false
+    end
+
+    return true
+end
+
+function generate_moves(unit, x, y)
+    local dist = unit.mv
+
     moves = {}
     for j=-dist,dist do
         for i=-dist,dist do
             local new_x = x+i
             local new_y = y+j
-            if new_x >= 1 and new_x <= grid_w and new_y >= 1 and new_y <= grid_h and not (i == 0 and j == 0) then
+            local new_cell = grid_at(new_x, new_y)
+
+            if cell_move_rules(new_cell, new_x, new_y) then
                 add(moves, {new_x, new_y})
             end
         end
@@ -299,7 +327,7 @@ end
 -- handle clicking when in interact mode
 function handle_cursor_interact()
     local cell = grid_cur()
-    if cell.unit.kind ~= '' and cell.unit.tribe == current_tribe() then
+    if cell.unit.kind ~= nil and cell.unit.tribe == current_tribe() then
         request_move_unit({cursor_x, cursor_y})
         -- TODO sanity check that we have valid moves
         cursor_mode = 'move'
@@ -339,6 +367,7 @@ function _update60()
             cursor_y = min(grid_h, cursor_y+1)
         elseif btnp(4) then
             action_menu.visible = true
+            cursor_mode = 'interact'
         elseif btnp(5) then
             -- open relevant menu
             if cursor_mode == 'interact' then
