@@ -131,6 +131,19 @@ function build_perlin_map(map_w, map_h)
 
 end
 
+-- check if there is a city in a 5x5 box
+function cities_in_range(x, y)
+    for j=-2,2 do
+        for i=-2,2 do
+            local cell = grid_at(x+i, y+j)
+            if cell ~= nil and cell.building.kind == 'city' then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- mapgen
 function generate_map()
     for j=1,grid_h do
@@ -206,6 +219,19 @@ function generate_map()
                 end
             end
             grid_at(i, j).tribe = closest_cap
+        end
+    end
+
+    -- spawn a handfull of more villages (ensuring that it's not too close to another village)
+    -- no village in 5x5
+    for j=1,grid_h do
+        for i=1,grid_w do
+            local cell = grid_at(i, j)
+            if cell.kind == 'grass' and cell.building.kind == nil and not cities_in_range(i, j) then
+                if rnd(1) > 0.5 then
+                    cell.building = {kind='city', level=0, tribe=nil, capital=false}
+                end
+            end
         end
     end
 end
@@ -424,6 +450,23 @@ function handle_cursor_interact()
         end})
     end
 
+    -- capture city if unit can still move
+    -- TODO might be problematic for units that can move twice?
+    -- should technically implement feature that unit needs to have arrived to this city
+    -- last turn
+    if cell.building.kind == 'city' and cell.building.tribe ~= current_tribe() and cell.unit.kind ~= nil and cell.unit.can_move then
+        add(tile_menu_items, {label='capture city', fn=function()
+            cell.building.tribe = current_tribe() 
+            -- promote villages into level 1 cities
+            if cell.building.level == 0 then
+                cell.building.level = 1
+            end
+            -- this uses a unit's move
+            cell.unit.can_move = false
+        end})
+    end
+
+
     -- ignore if there are no interactions
     if #tile_menu_items == 0 then
         return
@@ -551,7 +594,8 @@ function draw_building(building, x, y, tribe)
     local sprite_offset = get_spriteoffset(tribe)
 
     if building.kind == 'city' then       
-        sspr(16, 16+sprite_offset, 16, 16, x-7, y-8)
+        local level_offset = building.level * 16
+        sspr(level_offset, 16+sprite_offset, 16, 16, x-7, y-8)
     end
 end
 
@@ -605,7 +649,7 @@ function draw_hud()
     if building.kind ~= nil then 
         x = print(', '.. building.kind, x, 120, 7)
         
-        if building.kind == 'city' then
+        if building.kind == 'city' and building.tribe ~= nil then
             x = print(' ['..building.tribe..']', x, 120, 6)
         end
     end
