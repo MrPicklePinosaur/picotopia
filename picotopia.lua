@@ -22,8 +22,8 @@ cursor_y=flr(grid_h/2)
 
 -- spritesheet is index of player specific spritesheet in memory
 players = {
-    red={tribe='red', spritesheet=0},
-    blue={tribe='blue', spritesheet=1},
+    {tribe='red'},
+    {tribe='blue'},
     -- white={tribe='white', spritesheet=2},
     -- yellow={tribe='yellow', spritesheet=3},
 }
@@ -43,11 +43,34 @@ units={
 }
 
 -- menus
+action_menu = menu_new({
+    {label='move', fn=function()end},
+    {label='upgrade', fn=function()end},
+    {label='finish', fn=function()
+        -- TODO pretty bad that we don't have index of current player, so we need to search lol
+        for i, player in ipairs(players) do
+            if player.tribe == current_turn then
+                local next_index = (i % #players) + 1
+                current_turn = players[next_index].tribe
+
+                -- reset the turn
+                action_menu.visible = true
+
+                return
+            end
+        end
+    end},
+})
+action_menu.visible = true
+
 unit_menu = menu_new({
     {unit='warrior'},
     {unit='rider'},
 })
 unit_menu.visible = false
+
+upgrade_menu = menu_new({})
+upgrade_menu.visible = false
 
 move_preview = {}
 -- the position of the unit we wish to move
@@ -71,6 +94,15 @@ function panic(str)
     end
 end
 
+function clone_table(orig)
+    if type(orig) ~= "table" then return orig end
+    local copy = {}
+    for k, v in pairs(orig) do
+        copy[k] = clone_table(v)
+    end
+    return copy
+end
+
 function grid_at(x, y)
     return grid[(y-1)*grid_w+(x-1)+1]
 end
@@ -84,7 +116,14 @@ function to_screenspace(x, y)
 end
 
 function get_spriteoffset(tribe)
-    return players[tribe].spritesheet * 48
+    -- need to search for the tribe
+    for i, player in ipairs(players) do
+        if player.tribe == tribe then
+            return (i-1) * 48
+        end
+    end
+    printh('get_spriteoffset failed to find tribe '..tribe)
+    return 0
 end
 
 function build_perlin_map(map_w, map_h)
@@ -136,8 +175,7 @@ function generate_map()
     shuffle(quadrants)
     
     local capitals = {}
-    local i = 1
-    for _, player in pairs(players) do
+    for i, player in ipairs(players) do
         local cap_x = flr(rnd(quad_w)) + quadrants[i][1]
         local cap_y = flr(rnd(quad_h)) + quadrants[i][2]
         
@@ -148,7 +186,6 @@ function generate_map()
         cell.kind = 'grass'
         cell.building = {kind='city', level=1, tribe=player.tribe, capital=true}
         add(capitals, {x=cap_x, y=cap_y, tribe=player.tribe})
-        i += 1
     end
     
     -- assign all cells to be of tribe its closest to
@@ -171,7 +208,7 @@ end
 
 function spawn_unit(kind, tribe, x, y)
     local cell = grid_at(x, y)
-    local new_unit = units[kind]
+    local new_unit = clone_table(units[kind])
     new_unit.kind = kind
     new_unit.tribe = tribe
     new_unit.hp = max_hp
@@ -213,6 +250,17 @@ function generate_moves(dist, x, y)
         end
     end
     return moves
+end
+
+function update_action_menu()
+    if btnp(2) then
+        action_menu:up()
+    elseif btnp(3) then
+        action_menu:down()
+    elseif btnp(5) then
+        action_menu.visible = false
+        action_menu:cur().fn()
+    end
 end
 
 function update_unit_menu()
@@ -257,7 +305,9 @@ function handle_cursor_move()
 end
 
 function _update60()
-    if unit_menu.visible then
+    if action_menu.visible then
+        update_action_menu()
+    elseif unit_menu.visible then
         update_unit_menu()
     else
         -- move camera
@@ -269,6 +319,8 @@ function _update60()
             cursor_y = max(1, cursor_y-1)
         elseif btnp(3) then
             cursor_y = min(grid_h, cursor_y+1)
+        elseif btnp(4) then
+            action_menu.visible = true
         elseif btnp(5) then
             -- open relevant menu
             if cursor_mode == 'interact' then
@@ -393,8 +445,22 @@ function draw_hud()
     
     local pos = tostring(cursor_x)..','..tostring(cursor_y)
     print(pos, 125-4*#pos, 120, 7)
+
+    -- draw current turn
+    print('current turn '..current_turn, 0, 0, 7)
     
     -- menus
+    if action_menu.visible then
+        rect(31, 19, 97, 61, 7)
+        rectfill(32, 20, 96, 60, 1)
+
+        for i, item in ipairs(action_menu.items) do
+            local c = 6
+            if (action_menu:index() == i) c = 7
+            print(item.label, 36, 30+(i-1)*8, c)
+        end
+    end
+    
     if unit_menu.visible then
         rect(31, 19, 97, 61, 7)
         rectfill(32, 20, 96, 60, 1)
