@@ -22,12 +22,12 @@ cursor_y=flr(grid_h/2)
 
 -- spritesheet is index of player specific spritesheet in memory
 players = {
-    {tribe='red'},
-    {tribe='blue'},
+    {tribe='red', camera={0, 0}},
+    {tribe='blue', camera={0, 0}},
     -- white={tribe='white', spritesheet=2},
     -- yellow={tribe='yellow', spritesheet=3},
 }
-current_turn = 'red'
+current_turn = 1
 
 tile_colors = {
     grass={c1=11, c2=3},
@@ -47,18 +47,11 @@ action_menu = menu_new({
     {label='move', fn=function()end},
     {label='upgrade', fn=function()end},
     {label='finish', fn=function()
-        -- TODO pretty bad that we don't have index of current player, so we need to search lol
-        for i, player in ipairs(players) do
-            if player.tribe == current_turn then
-                local next_index = (i % #players) + 1
-                current_turn = players[next_index].tribe
+        on_end_turn()
 
-                -- reset the turn
-                action_menu.visible = true
+        current_turn = (current_turn % #players) + 1
 
-                return
-            end
-        end
+        on_start_turn()
     end},
 })
 action_menu.visible = true
@@ -111,6 +104,10 @@ function grid_cur()
     return grid_at(cursor_x, cursor_y)
 end
 
+function current_tribe()
+    return players[current_turn].tribe
+end
+
 function to_screenspace(x, y)
     return {-(y-1)*8+(x-1)*8, (y-1)*4+(x-1)*4}
 end
@@ -124,6 +121,22 @@ function get_spriteoffset(tribe)
     end
     printh('get_spriteoffset failed to find tribe '..tribe)
     return 0
+end
+
+function on_start_turn()
+    -- restore camera position
+    cursor_x, cursor_y = unpack(players[current_turn].camera)
+
+    -- reset UI
+    action_menu.visible = true
+
+    -- restore unit / city states
+
+end
+
+function on_end_turn()
+    -- save current camera position
+    players[current_turn].camera = {cursor_x, cursor_y}
 end
 
 function build_perlin_map(map_w, map_h)
@@ -186,6 +199,9 @@ function generate_map()
         cell.kind = 'grass'
         cell.building = {kind='city', level=1, tribe=player.tribe, capital=true}
         add(capitals, {x=cap_x, y=cap_y, tribe=player.tribe})
+
+        -- set player starting location to capital
+        player.camera = {cap_x, cap_y}
     end
     
     -- assign all cells to be of tribe its closest to
@@ -236,6 +252,8 @@ end
 
 function _init()
     generate_map()
+
+    on_start_turn()
 end
 
 function generate_moves(dist, x, y)
@@ -274,18 +292,18 @@ function update_unit_menu()
         unit_menu.visible = false
         -- spawn unit
         -- TODO take resource in account
-        spawn_unit(unit_menu:cur().unit, current_turn, cursor_x, cursor_y)
+        spawn_unit(unit_menu:cur().unit, current_tribe(), cursor_x, cursor_y)
     end
 end
 
 -- handle clicking when in interact mode
 function handle_cursor_interact()
     local cell = grid_cur()
-    if cell.unit.kind ~= '' and cell.unit.tribe == current_turn then
+    if cell.unit.kind ~= '' and cell.unit.tribe == current_tribe() then
         request_move_unit({cursor_x, cursor_y})
         -- TODO sanity check that we have valid moves
         cursor_mode = 'move'
-    elseif cell.building.kind == 'city' and cell.building.tribe == current_turn then
+    elseif cell.building.kind == 'city' and cell.building.tribe == current_tribe() then
         -- troop selection menu
         unit_menu.visible = true
     end
@@ -447,7 +465,7 @@ function draw_hud()
     print(pos, 125-4*#pos, 120, 7)
 
     -- draw current turn
-    print('current turn '..current_turn, 0, 0, 7)
+    print('current turn '..current_tribe(), 0, 0, 7)
     
     -- menus
     if action_menu.visible then
