@@ -63,8 +63,9 @@ tile_colors = {
 }
 
 units={
-    warrior={max_hp=10, cost=2, atk=2, def=2, mv=1, rng=1, skills={'dash', 'fortify'}},
-    rider={max_hp=10, cost=3, atk=2, def=1, mv=2, rng=1, skills={'dash', 'escape', 'fortify'}},
+    warrior={max_hp=10, cost=2, atk=2, def=2, mv=1, rng=1, skills={dash=true, fortify=true}},
+    rider={max_hp=10, cost=3, atk=2, def=1, mv=2, rng=1, skills={dash=true, escape=true, fortify=true}},
+    raft={max_hp=0, cost=0, atk=0, def=2, mv=2, rng=2, skills={float=true, carry=true}},
 }
 
 -- menus
@@ -168,7 +169,7 @@ function on_start_turn()
     for _, tile in ipairs(grid) do
         
         -- restore unit moved
-        if tile.unit.kind ~= nil and tile.unit.tribe == tribe then
+        if tile.unit.kind ~= nil and tile.unit.tribe == current_tribe() then
             tile.unit.can_move = true
         end
 
@@ -338,6 +339,33 @@ function confirm_move_unit(new_pos)
     cell.unit = {}
     grid_at(unpack(new_pos)).unit = unit_temp
     cancel_move_unit()
+
+    on_unit_move(new_pos)
+end
+
+-- runs after the unit is moved to a new tile
+function on_unit_move(pos)
+
+    local cell = grid_at(unpack(pos))
+
+    -- check if the unit should be converted to a boat unit if it lands on a port
+    -- TODO check that we own the port
+    if cell.building.kind == 'port' and cell.unit.skills.float == nil then
+        local unit_copy = clone_table(cell.unit)
+        spawn_unit('raft', current_tribe(), pos[1], pos[2])
+        cell.unit.max_hp = unit_copy.max_hp
+        cell.unit.hp = unit_copy.hp
+        cell.unit.carry = unit_copy -- used to restore the unit after disembarking
+    end
+
+    -- if we are a unit with the 'carry' skill, we disembark when reaching land
+    if cell.unit.skills.carry == true and not is_water_tile(cell) then
+        local cur_hp = cell.unit.hp
+        local unit_copy = clone_table(cell.unit.carry)
+        cell.unit = unit_copy
+        cell.unit.hp = cur_hp
+    end
+
 end
 
 function confirm_attack_unit(enemy_pos)
@@ -393,15 +421,19 @@ function cell_attack_rules(cell, x, y)
     return true
 end
 
+function is_water_tile(cell)
+    return (cell.kind == 'water' or cell.kind == 'deep-water')
+end
+
 -- return true or false if the cell is allowed to be moved to
-function cell_move_rules(cell, x, y)
+function cell_move_rules(unit, cell, x, y)
     -- stay within bounds of map
     if x < 1 or x > grid_w or y < 1 or y > grid_h then
         return false
     end
 
-    -- don't allow moving in water
-    if cell.kind == 'water' or cell.kind == 'deep-water' then
+    -- don't allow moving in water (that are not ports) IF the unit doesn't have float
+    if is_water_tile(cell) and cell.building.kind ~= 'port' and unit.skills.float == nil then
         return false
     end
 
@@ -430,7 +462,7 @@ function generate_moves(unit, x, y)
                 -- attack takes precedence
                 if (i >= -atk_dist and i <= atk_dist and j >= -atk_dist and j <= atk_dist) and cell_attack_rules(new_cell, new_x, new_y) and new_cell.unit.kind ~= nil and new_cell.unit.tribe ~= current_tribe() then
                     add(moves, {new_x, new_y, kind='attack'})
-                elseif (i >= -mv_dist and i <= mv_dist and j >= -mv_dist and j <= mv_dist) and cell_move_rules(new_cell, new_x, new_y) then
+                elseif (i >= -mv_dist and i <= mv_dist and j >= -mv_dist and j <= mv_dist) and cell_move_rules(unit, new_cell, new_x, new_y) then
                     add(moves, {new_x, new_y, kind='move'})
                 end
             end
@@ -696,6 +728,8 @@ function draw_unit(unit, x, y)
         sspr(0, sprite_offset, 8, 8, x-4, y-3)
     elseif unit.kind == 'rider' then
         sspr(8, sprite_offset, 8, 8, x-4, y-3)
+    elseif unit.kind == 'raft' then
+        sspr(48, sprite_offset, 8, 16, x-4, y-11)
     end
 end
 
