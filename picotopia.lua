@@ -147,6 +147,15 @@ function get_spriteoffset(tribe)
     return 0
 end
 
+-- generate coins depending on the state of the city
+function generate_coins(city)
+    local coins = city.level + 1
+    if city.capital then
+        coins += 1
+    end
+    return coins
+end
+
 function on_start_turn()
     -- restore camera position
     cursor_x, cursor_y = unpack(players[current_turn].camera)
@@ -155,8 +164,22 @@ function on_start_turn()
     action_menu.visible = true
     cursor_mode = 'interact'
 
-    -- restore unit / city states
-    reset_unit_moved(current_tribe())
+    -- TODO sadly we need to look through the whole map for now
+    for _, tile in ipairs(grid) do
+        
+        -- restore unit moved
+        if tile.unit.kind ~= nil and tile.unit.tribe == tribe then
+            tile.unit.can_move = true
+        end
+
+        -- produce money from cities
+        -- TODO no money if enemy unit on the city
+        if tile.building.kind == 'city' and tile.building.tribe == current_tribe() then
+            -- TODO play animation
+            current_player().coins += generate_coins(tile.building)
+        end
+
+    end
 
 end
 
@@ -352,16 +375,6 @@ function confirm_attack_unit(enemy_pos)
     end
 
     cancel_move_unit()
-end
-
--- at the beginning of turn, allow all units to move
-function reset_unit_moved(tribe)
-    -- TODO sadly we need to look through the whole map for now
-    for _, tile in ipairs(grid) do
-        if tile.unit.kind ~= nil and tile.unit.tribe == tribe then
-            tile.unit.can_move = true
-        end
-    end
 end
 
 function _init()
