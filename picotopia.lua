@@ -2,11 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 42
 __lua__
 
--- TODO for city borders
--- generate unique ID for city (unique name)
--- global table to access known cities position (and then it's tile data)
--- each tile that belong to a city also store the city they belong to
---      (optional also store the tribe)
+-- TODO population and city leveling
 
 #include menu.p8
 #include util.p8
@@ -26,11 +22,14 @@ cursor_y=flr(grid_h/2)
 
 -- building
 buildings = {
-    port={kind='port', cost=7},
-    lumber={kind='lumber hut', cost=3},
-    farm={kind='farm', cost=5},
+    port={kind='port', cost=7, pop=1},
+    lumber={kind='lumber hut', cost=3, pop=1},
+    farm={kind='farm', cost=5, pop=2},
 }
--- {kind='city', level=1, tribe=<tribe>, capital=true}
+
+-- pop: the current population in the city, this is used to track levelling for the city
+-- units: the number of units in the city, this is not related to population
+-- {kind='city', level=1, tribe=<tribe>, capital=true, name=<name>, id=<id>, pop=0, units=0}
 
 tech = {
     hunting=true,
@@ -364,6 +363,22 @@ function define_city_borders(x, y, range)
 
 end
 
+function city_gain_pop(city, pop)
+    -- determine how much population required for the next level
+    
+    while pop > 0 do
+        local required_pop = city.level+1
+        local pop_to_use = min(pop, required_pop-city.pop)
+        pop -= pop_to_use
+        city.pop += pop_to_use
+        if city.pop >= required_pop then
+            city.level += 1
+            -- TODO play animation
+        end
+    end
+
+end
+
 -- given a list of tiles, generate a list of edges around them
 function edge_to_str(edge)
     return tostring(edge[1])..','..tostring(edge[2])..','..tostring(edge[3])..','..tostring(edge[4])
@@ -467,7 +482,7 @@ function generate_map()
         -- capitals must be on grassland
         cell.kind = 'grass'
         local city_id = generate_city_id()
-        cell.building = {kind='city', level=1, tribe=player.tribe, capital=true, city_name=generate_city_name(player.tribe), id=city_id}
+        cell.building = {kind='city', level=1, tribe=player.tribe, capital=true, city_name=generate_city_name(player.tribe), id=city_id, pop=0}
         define_city_borders(cap_x, cap_y, 1) 
         -- add the city to list of cities
         city_table[city_id] = {cap_x, cap_y}
@@ -502,7 +517,7 @@ function generate_map()
             if cell.kind == 'grass' and cell.building.kind == nil and not cities_in_range(i, j) then
                 if rnd(1) > 0.5 then
                     local city_id = generate_city_id()
-                    cell.building = {kind='city', level=0, tribe=nil, capital=false, id=city_id}
+                    cell.building = {kind='city', level=0, tribe=nil, capital=false, id=city_id, pop=0}
                     city_table[city_id] = {cap_x, cap_y}
                 end
             end
@@ -667,37 +682,40 @@ function handle_cursor_interact()
     end
 
     -- check inside city borders to buils
-    local is_inside_city = false
-    if cell.city_id ~= nil and get_city_by_id(cell.city_id).tribe == current_tribe() then
-        is_inside_city = true
-    end
+    local inside_city = get_city_by_id(cell.city_id)
 
     -- TODO can make building code less repetitive?
-    if is_inside_city then
+    if inside_city ~= nil and inside_city.tribe == current_tribe() then
         if current_tech().forestry and cell.kind == 'forest' and cell.building.kind == nil then
             add(tile_menu_items, {label='build lumber hut', auto=false, fn=function()
-                if has_coins(buildings.lumber.cost) then
-                    cell.building = clone_table(buildings.lumber)
+                local building = buildings.lumber
+                if has_coins(building.cost) then
+                    cell.building = clone_table(building)
                     cell.kind = 'grass' -- converts forest into grassland
-                    spend_coins(buildings.lumber.cost)
+                    spend_coins(building.cost)
+                    city_gain_pop(inside_city, building.pop)
                 end
             end})
         end
 
         if  current_tech().farming and cell.kind == 'field' and cell.building.kind == nil then
             add(tile_menu_items, {label='build farm', auto=false, fn=function()
-                if has_coins(buildings.lumber.farm) then
-                    cell.building = clone_table(buildings.farm)
-                    spend_coins(buildings.farm.cost)
+                local building = buildings.farm
+                if has_coins(building.cost) then
+                    cell.building = clone_table(building)
+                    spend_coins(building.cost)
+                    city_gain_pop(inside_city, building.pop)
                 end
             end})
         end
 
         if current_tech().fishing and cell.kind == 'water' and cell.building.kind == nil then
             add(tile_menu_items, {label='build port', auto=false, fn=function()
-                if has_coins(buildings.port.cost) then
-                    cell.building = clone_table(buildings.port)
-                    spend_coins(buildings.port.cost)
+                local building = buildings.port
+                if has_coins(building.cost) then
+                    cell.building = clone_table(building)
+                    spend_coins(building.cost)
+                    city_gain_pop(inside_city, building.pop)
                 end
             end})
         end
