@@ -389,7 +389,6 @@ function city_border_edges(tiles)
             local x1, y1 = unpack(to_screenspace(edge[1], edge[2]))
             local x2, y2 = unpack(to_screenspace(edge[3], edge[4]))
 
-            -- TODO might need offset?
             edges[i] = {x1, y1-1, x2+1, y2-1}
         end
         -- convert edges to screenspace
@@ -667,34 +666,41 @@ function handle_cursor_interact()
         end})
     end
 
-    -- TODO also check inside territory
+    -- check inside city borders to buils
+    local is_inside_city = false
+    if cell.city_id ~= nil and get_city_by_id(cell.city_id).tribe == current_tribe() then
+        is_inside_city = true
+    end
+
     -- TODO can make building code less repetitive?
-    if current_tech().forestry and cell.kind == 'forest' and cell.building.kind == nil then
-        add(tile_menu_items, {label='build lumber hut', auto=false, fn=function()
-            if has_coins(buildings.lumber.cost) then
-                cell.building = clone_table(buildings.lumber)
-                cell.kind = 'grass' -- converts forest into grassland
-                spend_coins(buildings.lumber.cost)
-            end
-        end})
-    end
+    if is_inside_city then
+        if current_tech().forestry and cell.kind == 'forest' and cell.building.kind == nil then
+            add(tile_menu_items, {label='build lumber hut', auto=false, fn=function()
+                if has_coins(buildings.lumber.cost) then
+                    cell.building = clone_table(buildings.lumber)
+                    cell.kind = 'grass' -- converts forest into grassland
+                    spend_coins(buildings.lumber.cost)
+                end
+            end})
+        end
 
-    if  current_tech().farming and cell.kind == 'field' and cell.building.kind == nil then
-        add(tile_menu_items, {label='build farm', auto=false, fn=function()
-            if has_coins(buildings.lumber.farm) then
-                cell.building = clone_table(buildings.farm)
-                spend_coins(buildings.farm.cost)
-            end
-        end})
-    end
+        if  current_tech().farming and cell.kind == 'field' and cell.building.kind == nil then
+            add(tile_menu_items, {label='build farm', auto=false, fn=function()
+                if has_coins(buildings.lumber.farm) then
+                    cell.building = clone_table(buildings.farm)
+                    spend_coins(buildings.farm.cost)
+                end
+            end})
+        end
 
-    if current_tech().fishing and cell.kind == 'water' and cell.building.kind == nil then
-        add(tile_menu_items, {label='build port', auto=false, fn=function()
-            if has_coins(buildings.port.cost) then
-                cell.building = clone_table(buildings.port)
-                spend_coins(buildings.port.cost)
-            end
-        end})
+        if current_tech().fishing and cell.kind == 'water' and cell.building.kind == nil then
+            add(tile_menu_items, {label='build port', auto=false, fn=function()
+                if has_coins(buildings.port.cost) then
+                    cell.building = clone_table(buildings.port)
+                    spend_coins(buildings.port.cost)
+                end
+            end})
+        end
     end
 
     -- ignore if there are no interactions
