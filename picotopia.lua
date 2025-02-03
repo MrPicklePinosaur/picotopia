@@ -2,6 +2,12 @@ pico-8 cartridge // http://www.pico-8.com
 version 42
 __lua__
 
+-- TODO for city borders
+-- generate unique ID for city (unique name)
+-- global table to access known cities position (and then it's tile data)
+-- each tile that belong to a city also store the city they belong to
+--      (optional also store the tribe)
+
 #include menu.p8
 #include util.p8
 
@@ -66,6 +72,11 @@ units={
     warrior={max_hp=10, cost=2, atk=2, def=2, mv=1, rng=1, skills={dash=true, fortify=true}},
     rider={max_hp=10, cost=3, atk=2, def=1, mv=2, rng=1, skills={dash=true, escape=true, fortify=true}},
     raft={max_hp=0, cost=0, atk=0, def=2, mv=2, rng=2, skills={float=true, carry=true}},
+}
+
+-- global table of cities that map it's name to
+city_table = {
+
 }
 
 -- menus
@@ -148,6 +159,14 @@ function get_spriteoffset(tribe)
     return 0
 end
 
+function get_city_by_id(city_id)
+    local city_pos = city_table[city_id]
+    if city_pos == nil then
+        return nil
+    end
+    return grid_at(unpack(city_pos)).building
+end
+
 -- generate coins depending on the state of the city
 function generate_coins(city)
     local coins = city.level + 1
@@ -189,115 +208,7 @@ function on_end_turn()
     players[current_turn].camera = {cursor_x, cursor_y}
 end
 
-function build_perlin_map(map_w, map_h)
-
-end
-
--- check if there is a city in a 5x5 box
-function cities_in_range(x, y)
-    for j=-2,2 do
-        for i=-2,2 do
-            local cell = grid_at(x+i, y+j)
-            if cell ~= nil and cell.building.kind == 'city' then
-                return true
-            end
-        end
-    end
-    return false
-end
-
--- mapgen
-function generate_map()
-    for j=1,grid_h do
-        for i=1,grid_w do
-            if rnd(1) > 0.2 then
-                local new_tile = add(grid, {kind='grass', building={}, unit={}, resource={}})
-                -- if grass choose a random resource type
-                local roll = rnd(1)
-                if roll > 0.85 then
-                    new_tile.kind = 'forest'
-                    if rnd(1) > 0.8 then
-                       new_tile.resource.kind = 'animal'
-                    end
-                elseif roll > 0.7 then
-                    new_tile.kind = 'mountain'
-                elseif roll > 0.6 then
-                    new_tile.kind = 'field'
-                else
-                    if rnd(1) > 0.9 then
-                       new_tile.resource.kind = 'fruit'
-                    end
-                end
-            else
-                add(grid, {kind='water', building={}, unit={}, resource={}})
-            end
-        end
-    end
-    
-    -- perlin noise
-    
-    -- choose capital locations, then force 3x3 to be land
-    -- split map into 4 'domains and randomly choose one for each player'
-    local quad_pad = 2
-    local quad_w = flr(grid_w / 2) - quad_pad*2
-    local quad_h = flr(grid_h / 2) - quad_pad*2
-    local quadrants = {
-        {quad_pad, quad_pad},
-        {quad_pad, grid_h-quad_pad-quad_h},
-        {grid_w-quad_pad-quad_w, quad_pad},
-        {grid_w-quad_pad-quad_w, grid_h-quad_pad-quad_h}
-    }
-
-    shuffle(quadrants)
-    
-    local capitals = {}
-    for i, player in ipairs(players) do
-        local cap_x = flr(rnd(quad_w)) + quadrants[i][1]
-        local cap_y = flr(rnd(quad_h)) + quadrants[i][2]
-        
-        -- insert player capital into map
-        -- TODO generste a goofy name
-        local cell = grid_at(cap_x, cap_y)
-        -- capitals must be on grassland
-        cell.kind = 'grass'
-        cell.building = {kind='city', level=1, tribe=player.tribe, capital=true}
-        add(capitals, {x=cap_x, y=cap_y, tribe=player.tribe})
-
-        -- set player starting location to capital
-        player.camera = {cap_x, cap_y}
-    end
-    
-    -- assign all cells to be of tribe its closest to
-    for j=1,grid_h do
-        for i=1,grid_w do
-            -- gotta do all this manually TT
-            local closest_cap = nil
-            local small_d = 1000
-            for _, cap in ipairs(capitals) do
-                local d = sqrt((j-cap.y)^2+(i-cap.x)^2)
-                if d < small_d then
-                    small_d = d
-                    closest_cap = cap.tribe
-                end
-            end
-            grid_at(i, j).tribe = closest_cap
-        end
-    end
-
-    -- spawn a handfull of more villages (ensuring that it's not too close to another village)
-    -- no village in 5x5
-    for j=1,grid_h do
-        for i=1,grid_w do
-            local cell = grid_at(i, j)
-            if cell.kind == 'grass' and cell.building.kind == nil and not cities_in_range(i, j) then
-                if rnd(1) > 0.5 then
-                    cell.building = {kind='city', level=0, tribe=nil, capital=false}
-                end
-            end
-        end
-    end
-end
-
+-- unit related
 function spawn_unit(kind, tribe, x, y)
     local cell = grid_at(x, y)
     local new_unit = clone_table(units[kind])
@@ -363,7 +274,7 @@ function on_unit_move(pos)
         local cur_hp = cell.unit.hp
         local unit_copy = clone_table(cell.unit.carry)
         cell.unit = unit_copy
-        cell.unit.hp = cur_hp
+        cell.unit.hp = cur_h
     end
 
 end
@@ -404,6 +315,153 @@ function confirm_attack_unit(enemy_pos)
 
     cancel_move_unit()
 end
+
+-- city related
+
+-- check if there is a city in a 5x5 box
+function cities_in_range(x, y)
+    for j=-2,2 do
+        for i=-2,2 do
+            local cell = grid_at(x+i, y+j)
+            if cell ~= nil and cell.building.kind == 'city' then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+_city_counter = 0
+function generate_city_id()
+    _city_counter += 1
+    return 'city'..tostring(_city_counter)
+end
+
+-- TODO actually have custom city names for each tribe
+function generate_city_name(tribe)
+    return tribe..' city'
+end
+
+-- takes coordinates of cell with city
+function define_city_borders(x, y, range)
+
+    local cell = grid_at(x, y)
+    if cell.building.kind ~= 'city' then
+        printh('WARN: attemtping to call define_city_borders on non city')
+        return
+    end
+    
+    local city_id = cell.building.id
+    for j=-range,range do
+        for i=-range,range do
+            local tile = grid_at(x+i, y+j)
+            -- don't override existing city borders
+            if tile ~= nil and tile.city_id == nil then
+                tile.city_id = city_id
+            end
+        end
+    end
+
+end
+
+-- mapgen
+-- TODO make this customizable depending on the tribe
+function generate_map()
+    for j=1,grid_h do
+        for i=1,grid_w do
+            if rnd(1) > 0.2 then
+                local new_tile = add(grid, {kind='grass', building={}, unit={}, resource={}})
+                -- if grass choose a random resource type
+                local roll = rnd(1)
+                if roll > 0.85 then
+                    new_tile.kind = 'forest'
+                    if rnd(1) > 0.8 then
+                       new_tile.resource.kind = 'animal'
+                    end
+                elseif roll > 0.7 then
+                    new_tile.kind = 'mountain'
+                elseif roll > 0.6 then
+                    new_tile.kind = 'field'
+                else
+                    if rnd(1) > 0.9 then
+                       new_tile.resource.kind = 'fruit'
+                    end
+                end
+            else
+                add(grid, {kind='water', building={}, unit={}, resource={}})
+            end
+        end
+    end
+    
+    -- perlin noise
+    
+    -- choose capital locations, then force 3x3 to be land
+    -- split map into 4 'domains and randomly choose one for each player'
+    local quad_pad = 2
+    local quad_w = flr(grid_w / 2) - quad_pad*2
+    local quad_h = flr(grid_h / 2) - quad_pad*2
+    local quadrants = {
+        {quad_pad, quad_pad},
+        {quad_pad, grid_h-quad_pad-quad_h},
+        {grid_w-quad_pad-quad_w, quad_pad},
+        {grid_w-quad_pad-quad_w, grid_h-quad_pad-quad_h}
+    }
+
+    shuffle(quadrants)
+    
+    local capitals = {}
+    for i, player in ipairs(players) do
+        local cap_x = flr(rnd(quad_w)) + quadrants[i][1]
+        local cap_y = flr(rnd(quad_h)) + quadrants[i][2]
+        
+        -- insert player capital into map
+        local cell = grid_at(cap_x, cap_y)
+        -- capitals must be on grassland
+        cell.kind = 'grass'
+        local city_id = generate_city_id()
+        cell.building = {kind='city', level=1, tribe=player.tribe, capital=true, city_name=generate_city_name(player.tribe), id=city_id}
+        define_city_borders(cap_x, cap_y, 1) 
+        -- add the city to list of cities
+        city_table[city_id] = {cap_x, cap_y}
+        add(capitals, {x=cap_x, y=cap_y, tribe=player.tribe})
+
+        -- set player starting location to capital
+        player.camera = {cap_x, cap_y}
+    end
+    
+    -- assign all cells to be of tribe its closest to
+    for j=1,grid_h do
+        for i=1,grid_w do
+            -- gotta do all this manually TT
+            local closest_cap = nil
+            local small_d = 1000
+            for _, cap in ipairs(capitals) do
+                local d = sqrt((j-cap.y)^2+(i-cap.x)^2)
+                if d < small_d then
+                    small_d = d
+                    closest_cap = cap.tribe
+                end
+            end
+            grid_at(i, j).tribe = closest_cap
+        end
+    end
+
+    -- spawn a handfull of more villages (ensuring that it's not too close to another village)
+    -- no village in 5x5
+    for j=1,grid_h do
+        for i=1,grid_w do
+            local cell = grid_at(i, j)
+            if cell.kind == 'grass' and cell.building.kind == nil and not cities_in_range(i, j) then
+                if rnd(1) > 0.5 then
+                    local city_id = generate_city_id()
+                    cell.building = {kind='city', level=0, tribe=nil, capital=false, id=city_id}
+                    city_table[city_id] = {cap_x, cap_y}
+                end
+            end
+        end
+    end
+end
+
 
 function _init()
     generate_map()
@@ -548,6 +606,7 @@ function handle_cursor_interact()
             if cell.building.level == 0 then
                 cell.building.level = 1
             end
+            define_city_borders(cursor_x, cursor_y)
             -- this uses a unit's move
             cell.unit.can_move = false
         end})
@@ -703,6 +762,19 @@ function draw_tile(tile, x, y)
     
     if tile.unit.kind ~= nil then
         draw_unit(tile.unit, x, y)
+    end
+
+    -- TEMP draw a small indication on the city border
+    if tile.city_id ~= nil then
+        local city = get_city_by_id(tile.city_id)
+        -- TODO better way to get tribe color
+        local c = 5
+        if city.tribe == 'red' then
+            c = 8
+        elseif city.tribe == 'blue' then
+            c = 12
+        end
+        circ(x, y, 2, c)
     end
 end
 
