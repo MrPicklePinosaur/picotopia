@@ -364,6 +364,55 @@ function define_city_borders(x, y, range)
 
 end
 
+-- given a list of tiles, generate a list of edges around them
+function edge_to_str(edge)
+    return tostring(edge[1])..','..tostring(edge[2])..','..tostring(edge[3])..','..tostring(edge[4])
+end
+
+function str_to_edge(str)
+    return split(str, ',')
+end
+
+-- given a list of (connected) tiles, determine the list of edges that will draw an outline around all the tiles
+function city_border_edges(tiles)
+    edge_set = {}
+
+    for _, tile in ipairs(tiles) do
+        local x, y = unpack(tile)
+        local edges = {
+            {x, y, x+1, y},
+            {x, y+1, x+1, y+1},
+            {x+1, y, x+1, y+1},
+            {x, y, x, y+1}
+        }
+        for i, edge in ipairs(edges) do
+            local x1, y1 = unpack(to_screenspace(edge[1], edge[2]))
+            local x2, y2 = unpack(to_screenspace(edge[3], edge[4]))
+
+            -- TODO might need offset?
+            edges[i] = {x1, y1-1, x2+1, y2-1}
+        end
+        -- convert edges to screenspace
+        for _, edge in ipairs(edges) do
+            local edge_str = edge_to_str(edge)
+            if edge_set[edge_str] == nil then
+                -- unique edge, add it
+                edge_set[edge_str] = true
+            else
+                -- duplicate edge detected, remove it completely
+                edge_set[edge_str] = nil
+            end
+        end
+    end
+
+    -- convert edge set back into an array
+    edge_arr = {}
+    for edge_str, _ in pairs(edge_set) do
+        add(edge_arr, str_to_edge(edge_str))
+    end
+    return edge_arr
+end
+
 -- mapgen
 -- TODO make this customizable depending on the tribe
 function generate_map()
@@ -469,6 +518,12 @@ function _init()
     -- TEMP setup scenario
     spawn_unit('rider', 'red', 8, 8)
     spawn_unit('rider', 'blue', 8, 9)
+
+    -- test
+    -- local res = city_border_edges({{0,0},{0,1},{1,0},{1,1}})
+    -- for _, edge in ipairs(res) do
+    --     printh('edge '..edge_to_str(edge))
+    -- end
 
     ----------
 
@@ -763,19 +818,6 @@ function draw_tile(tile, x, y)
     if tile.unit.kind ~= nil then
         draw_unit(tile.unit, x, y)
     end
-
-    -- TEMP draw a small indication on the city border
-    if tile.city_id ~= nil then
-        local city = get_city_by_id(tile.city_id)
-        -- TODO better way to get tribe color
-        local c = 5
-        if city.tribe == 'red' then
-            c = 8
-        elseif city.tribe == 'blue' then
-            c = 12
-        end
-        circ(x, y, 2, c)
-    end
 end
 
 function draw_building(building, x, y, tribe)
@@ -827,6 +869,38 @@ function draw_map_ui()
 
         circ(pos[1], pos[2], 4, 0)
         circ(pos[1], pos[2], 3, c)
+    end
+
+    -- draw borders around each city
+    -- TODO sorta inefficient?
+    local city_borders = {}
+    for j=1,grid_h do
+        for i=1,grid_w do
+            local cell = grid_at(i, j)
+            if cell.city_id ~= nil then
+                if city_borders[cell.city_id] == nil then
+                    city_borders[cell.city_id] = {}
+                end
+                add(city_borders[cell.city_id], {i, j})
+            end
+        end
+    end
+
+    for city_id, tiles in pairs(city_borders) do
+        local edges = city_border_edges(tiles)
+        -- TODO better way of getting color from city
+        local c = 5
+        local tribe = get_city_by_id(city_id).tribe
+        if tribe == 'red' then
+            c = 8
+        elseif tribe == 'blue' then
+            c = 12
+        end
+
+        for _, edge in ipairs(edges) do
+            -- TODO determine color to draw
+            line(edge[1], edge[2], edge[3], edge[4], c)
+        end
     end
 end
 
