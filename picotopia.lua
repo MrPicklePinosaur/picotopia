@@ -5,6 +5,7 @@ __lua__
 -- TODO population and city leveling
 
 #include menu.p8
+#include tween.p8
 #include util.p8
 
 -- map sizes 11, 14, 16, 18, 20 or 30
@@ -373,6 +374,7 @@ function city_gain_pop(city, pop)
         city.pop += pop_to_use
         if city.pop >= required_pop then
             city.level += 1
+            city.pop = 0
             -- TODO play animation
         end
     end
@@ -481,6 +483,7 @@ function generate_map()
         local cell = grid_at(cap_x, cap_y)
         -- capitals must be on grassland
         cell.kind = 'grass'
+        cell.resource = {}
         local city_id = generate_city_id()
         cell.building = {kind='city', level=1, tribe=player.tribe, capital=true, city_name=generate_city_name(player.tribe), id=city_id, pop=0}
         define_city_borders(cap_x, cap_y, 1) 
@@ -514,7 +517,7 @@ function generate_map()
     for j=1,grid_h do
         for i=1,grid_w do
             local cell = grid_at(i, j)
-            if cell.kind == 'grass' and cell.building.kind == nil and not cities_in_range(i, j) then
+            if cell.kind == 'grass' and cell.building.kind == nil and cell.resource.kind == nil and not cities_in_range(i, j) then
                 if rnd(1) > 0.5 then
                     local city_id = generate_city_id()
                     cell.building = {kind='city', level=0, tribe=nil, capital=false, id=city_id, pop=0}
@@ -719,6 +722,27 @@ function handle_cursor_interact()
                 end
             end})
         end
+
+        if current_tech().organization and cell.resource.kind == 'fruit' then
+            add(tile_menu_items, {label='harvest fruit', auto=false, fn=function()
+                -- TODO hardcoded cost of harvesting fruit
+                if has_coins(2) then
+                    cell.resource = {}
+                    spend_coins(2)
+                    city_gain_pop(inside_city, 1)
+                end
+            end})
+        end
+
+        if current_tech().hunting and cell.resource.kind == 'animal' then
+            add(tile_menu_items, {label='hunt animal', auto=false, fn=function()
+                if has_coins(2) then
+                    cell.resource = {}
+                    spend_coins(2)
+                    city_gain_pop(inside_city, 1)
+                end
+            end})
+        end
     end
 
     -- ignore if there are no interactions
@@ -759,6 +783,8 @@ function handle_cursor_move()
 end
 
 function _update60()
+    ween_machine:update()
+
     if action_menu.visible then
         update_action_menu()
     elseif tile_menu.visible then
@@ -945,6 +971,8 @@ function draw_hud()
         
         if building.kind == 'city' and building.tribe ~= nil then
             x = print(' ['..building.tribe..']', x, 120, 6)
+
+            print('population '..tostring(building.pop)..'/'..tostring(building.level+1), 0, 100, 6)
         end
     end
     
